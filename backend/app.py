@@ -33,3 +33,30 @@ def predict():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+
+    from flask import Flask, request, jsonify
+import tensorflow as tf
+
+# Initialize Flask app
+app = Flask(__name__)
+
+# Load your TensorFlow model
+model = tf.keras.models.load_model('my_model')  # Replace 'my_model' with your model path
+
+# Define a route for predictions
+@app.route('/predict', methods=['POST'])
+def predict():
+    # Get input data from the request
+    data = request.json
+    input_data = data['input']
+
+    # Make a prediction using the model
+    prediction = model.predict(input_data)
+
+    # Return the prediction as a JSON response
+    return jsonify({'prediction': prediction.tolist()})
+
+# Run the app
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
