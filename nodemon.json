@@ -1,0 +1,7 @@
+{
+    "watch": ["model.py"],
+    "ext": "py",
+    "ignore": ["frontend/"],
+    "exec": "python model.py"
+  }
+  
