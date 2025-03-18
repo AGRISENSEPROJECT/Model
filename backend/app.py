@@ -28,14 +28,28 @@ def predict_texture(img_path):
     texture_classes = ['sandy', 'loamy', 'clayey', 'alluvial']
     return texture_classes[predicted_class[0]]
 
+# Define the root route
+@app.route('/')
+def home():
+    return "Welcome to the AgriSense AI Backend!"
+
 # Define the prediction route
 @app.route('/predict', methods=['POST'])
 def predict():
-    img_file = request.files['image']
-    img_path = 'uploaded_image.png'
-    img_file.save(img_path)
-    predicted_texture = predict_texture(img_path)
-    return jsonify({'predicted_texture': predicted_texture})
+    # Get the JSON payload
+    data = request.json
+    if not data or 'image_path' not in data:
+        return jsonify({'error': 'Missing image_path in JSON payload'}), 400
+
+    # Get the image path from the JSON payload
+    img_path = data['image_path']
+
+    # Predict the texture
+    try:
+        predicted_texture = predict_texture(img_path)
+        return jsonify({'predicted_texture': predicted_texture})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # Run the app
 if __name__ == '__main__':
