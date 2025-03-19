@@ -199,7 +199,7 @@ MODEL_PATH = 'soil_texture_mobilenetv2.keras'
 FERTILIZER_MODEL_PATH = 'fertilizer_predictor.pkl'
 LABEL_ENCODERS_PATH = 'label_encoders.pkl'
 SCALER_PATH = 'scaler.pkl'
-
+#this is a comment
 # Image size for preprocessing
 IMG_SIZE = (224, 224)
 BATCH_SIZE = 32
