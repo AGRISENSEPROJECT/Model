@@ -13,6 +13,8 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
 import os
 import joblib
+from flask import Flask, request, jsonify
+
 
 MODEL_PATH = 'soil_texture_mobilenetv2.keras'
 CROP_MODEL_PATH = 'crop_predictor.pkl'
