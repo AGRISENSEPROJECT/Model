@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Soil Analysis</title>
+</head>
+<body>
+    <h1>Soil Analysis and Recommendations</h1>
+    <form id="predictForm" enctype="multipart/form-data">
+        <label>Soil Image:</label><input type="file" name="image" accept="image/*" required><br>
+        <label>Temperature (°C):</label><input type="number" name="temperature" step="0.1" required><br>
+        <label>Humidity (%):</label><input type="number" name="humidity" step="0.1" required><br>
+        <label>Rainfall (mm):</label><input type="number" name="rainfall" step="0.1" required><br>
+        <label>Crop Type:</label>
+        <select name="crop_type" required>
+            <option value="rice">Rice</option>
+            <option value="Irish Potatoes">Irish Potatoes</option>
+            <option value="Tomatoes">Tomatoes</option>
+        </select><br>
+        <label>Nitrogen (mg/kg):</label><input type="number" name="nitrogen" step="0.1" required><br>
+        <label>Phosphorus (mg/kg):</label><input type="number" name="phosphorus" step="0.1" required><br>
+        <label>Potassium (mg/kg):</label><input type="number" name="potassium" step="0.1" required><br>
+        <button type="submit">Get Recommendations</button>
+    </form>
+    <div id="result"></div>
+    <script>
+        document.getElementById('predictForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const response = await fetch('http://localhost:5000/predict', {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json();
+            document.getElementById('result').innerHTML = `<pre>${JSON.stringify(result, null, 2)}</pre>`;
+        });
+    </script>
+</body>
+</html>
