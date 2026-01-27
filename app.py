@@ -8,12 +8,14 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.callbacks import ReduceLROnPlateau
 from flask import Flask, request, jsonify
+from flask_cors import CORS
+from flasgger import Swagger
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
 import os
 import joblib
-from flask import Flask, request, jsonify
+import uuid
 
 
 MODEL_PATH = 'soil_texture_mobilenetv2.keras'
@@ -24,6 +26,11 @@ IMG_SIZE = (224, 224)
 BATCH_SIZE = 32
 
 app = Flask(__name__)
+CORS(app)
+swagger = Swagger(app)
+
+UPLOAD_FOLDER = 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def generate_synthetic_data():
     crop_suitability = {
@@ -165,7 +172,7 @@ def recommend_crop(soil_texture, temperature, humidity, rainfall):
         crop_model = joblib.load(CROP_MODEL_PATH)
         scaler = joblib.load(SCALER_PATH)
         label_encoder = joblib.load(LABEL_ENCODER_PATH)
-    input_data = pd.DataFrame([[soil_texture, temperature, humidity, rainfall]], 
+    input_data = pd.DataFrame([[soil_texture, temperature, humidity, rainfall]],
                              columns=['soil_texture', 'temperature', 'humidity', 'rainfall'])
     input_data['soil_texture'] = label_encoder.transform([soil_texture])[0]
     input_data[['temperature', 'humidity', 'rainfall']] = scaler.transform(input_data[['temperature', 'humidity', 'rainfall']])
@@ -241,32 +248,126 @@ def load_models():
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    content = request.get_json()
-    if not content:
-        return jsonify({"error": "No JSON data provided"}), 400
-    image_path = content.get('image')
-    temperature = content.get('temperature')
-    humidity = content.get('humidity')
-    rainfall = content.get('rainfall')
-    crop_type = content.get('crop_type')
-    nitrogen = content.get('nitrogen')
-    phosphorus = content.get('phosphorus')
-    potassium = content.get('potassium')
-    if not all([image_path, temperature, humidity, rainfall, crop_type, nitrogen, phosphorus, potassium]):
-        return jsonify({"error": "Missing required parameters"}), 400
-    if not os.path.exists(image_path):
-        return jsonify({"error": "Image file not found"}), 400
-    models, status = load_models()
-    if not models:
-        return jsonify({"error": status}), 500
-    soil_texture = predict_texture(image_path, models['texture'])
-    crop_recommendations = recommend_crop(soil_texture, temperature, humidity, rainfall)
-    fertilizer_recommendation = recommend_fertilizer(soil_texture, crop_type, nitrogen, phosphorus, potassium)
-    return jsonify({
-        "soil_texture": soil_texture,
-        "crop_recommendations": crop_recommendations,
-        "fertilizer_recommendation": fertilizer_recommendation
-    })
+    """
+    Soil Analysis and Crop Recommendation API
+    ---
+    parameters:
+      - name: image
+        in: formData
+        type: file
+        required: true
+        description: Image of the soil.
+      - name: temperature
+        in: formData
+        type: number
+        required: true
+        description: Current temperature in Celsius.
+      - name: humidity
+        in: formData
+        type: number
+        required: true
+        description: Current humidity percentage.
+      - name: rainfall
+        in: formData
+        type: number
+        required: true
+        description: Current rainfall in mm.
+      - name: crop_type
+        in: formData
+        type: string
+        required: true
+        enum: ['rice', 'Irish Potatoes', 'Tomatoes']
+        description: Target crop type.
+      - name: nitrogen
+        in: formData
+        type: number
+        required: true
+        description: Nitrogen content (mg/kg).
+      - name: phosphorus
+        in: formData
+        type: number
+        required: true
+        description: Phosphorus content (mg/kg).
+      - name: potassium
+        in: formData
+        type: number
+        required: true
+        description: Potassium content (mg/kg).
+    responses:
+      200:
+        description: Prediction results.
+        schema:
+          properties:
+            soil_texture:
+              type: string
+            crop_recommendations:
+              type: array
+              items:
+                properties:
+                  crop:
+                    type: string
+                  suitability_score:
+                    type: number
+            fertilizer_recommendation:
+              type: object
+              properties:
+                recommended_fertilizer:
+                  type: string
+                description:
+                  type: string
+                soil_npk_status:
+                  type: string
+                additional_recommendations:
+                  type: array
+                  items:
+                    type: string
+    """
+    if 'image' not in request.files:
+        return jsonify({"error": "No image part"}), 400
+
+    file = request.files['image']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
+    # Get non-file data from form
+    try:
+        temperature = float(request.form.get('temperature'))
+        humidity = float(request.form.get('humidity'))
+        rainfall = float(request.form.get('rainfall'))
+        crop_type = request.form.get('crop_type')
+        nitrogen = float(request.form.get('nitrogen'))
+        phosphorus = float(request.form.get('phosphorus'))
+        potassium = float(request.form.get('potassium'))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid or missing numerical parameters"}), 400
+
+    if not crop_type:
+        return jsonify({"error": "Missing crop_type"}), 400
+
+    # Save the file temporarily
+    filename = str(uuid.uuid4()) + "_" + file.filename
+    image_path = os.path.join(UPLOAD_FOLDER, filename)
+    file.save(image_path)
+
+    try:
+        models, status = load_models()
+        if not models:
+            return jsonify({"error": status}), 500
+
+        soil_texture = predict_texture(image_path, models['texture'])
+        crop_recommendations = recommend_crop(soil_texture, temperature, humidity, rainfall)
+        fertilizer_recommendation = recommend_fertilizer(soil_texture, crop_type, nitrogen, phosphorus, potassium)
+
+        # Cleanup image after prediction (optional, but good for space)
+        # os.remove(image_path)
+
+        return jsonify({
+            "soil_texture": soil_texture,
+            "crop_recommendations": crop_recommendations,
+            "fertilizer_recommendation": fertilizer_recommendation
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     models, status = load_models()

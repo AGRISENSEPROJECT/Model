@@ -1,4 +1,6 @@
 # created by virtualenv automatically
 __pycache__
 venv
+.venv
 ./flask.py
+uploads/
