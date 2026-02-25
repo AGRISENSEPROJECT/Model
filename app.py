@@ -166,18 +166,122 @@ def predict_texture(img_path, model):
     return texture_classes[predicted_class[0]]
 
 def recommend_crop(soil_texture, temperature, humidity, rainfall):
+    # Check if soil texture is supported
+    supported_textures = ['sandy', 'loamy', 'clayey', 'alluvial']
+    if soil_texture not in supported_textures:
+        return {
+            "error": f"Unsupported soil texture: '{soil_texture}'. Our system currently supports: {', '.join(supported_textures)}.",
+            "message": "For specialized soil types not in our dataset, we recommend consulting with local agricultural advisors who can provide personalized recommendations based on your specific soil conditions.",
+            "supported_textures": supported_textures
+        }
+
     if not os.path.exists(CROP_MODEL_PATH) or not os.path.exists(SCALER_PATH) or not os.path.exists(LABEL_ENCODER_PATH):
         crop_model = train_crop_model()
     else:
         crop_model = joblib.load(CROP_MODEL_PATH)
         scaler = joblib.load(SCALER_PATH)
         label_encoder = joblib.load(LABEL_ENCODER_PATH)
-    input_data = pd.DataFrame([[soil_texture, temperature, humidity, rainfall]],
-                             columns=['soil_texture', 'temperature', 'humidity', 'rainfall'])
-    input_data['soil_texture'] = label_encoder.transform([soil_texture])[0]
-    input_data[['temperature', 'humidity', 'rainfall']] = scaler.transform(input_data[['temperature', 'humidity', 'rainfall']])
-    prediction = crop_model.predict(input_data)
-    return [{"crop": prediction[0], "suitability_score": 100.0}]
+
+    # Get all possible crops
+    all_crops = ['rice', 'Irish Potatoes', 'Tomatoes']
+    recommendations = []
+
+    for crop in all_crops:
+        input_data = pd.DataFrame([[soil_texture, temperature, humidity, rainfall]],
+                                 columns=['soil_texture', 'temperature', 'humidity', 'rainfall'])
+        input_data['soil_texture'] = label_encoder.transform([soil_texture])[0]
+        input_data[['temperature', 'humidity', 'rainfall']] = scaler.transform(input_data[['temperature', 'humidity', 'rainfall']])
+
+        # Get prediction probability for this crop
+        probabilities = crop_model.predict_proba(input_data)[0]
+        crop_classes = crop_model.classes_
+
+        # Find the probability for this specific crop
+        if crop in crop_classes:
+            crop_index = list(crop_classes).index(crop)
+            probability = probabilities[crop_index] * 100  # Convert to percentage
+        else:
+            probability = 0.0
+
+        # Calculate suitability score based on environmental factors
+        crop_requirements = {
+            'rice': {
+                'soil_texture': ['alluvial', 'clayey'],
+                'temperature': {'min': 20, 'max': 35},
+                'humidity': {'min': 60, 'max': 90},
+                'rainfall': {'min': 800, 'max': 2000}
+            },
+            'Irish Potatoes': {
+                'soil_texture': ['loamy', 'sandy'],
+                'temperature': {'min': 15, 'max': 25},
+                'humidity': {'min': 60, 'max': 85},
+                'rainfall': {'min': 500, 'max': 700}
+            },
+            'Tomatoes': {
+                'soil_texture': ['sandy', 'loamy'],
+                'temperature': {'min': 18, 'max': 29},
+                'humidity': {'min': 50, 'max': 70},
+                'rainfall': {'min': 400, 'max': 600}
+            }
+        }
+
+        reqs = crop_requirements[crop]
+        score = 0.0
+
+        # Soil texture suitability (40% weight)
+        if soil_texture in reqs['soil_texture']:
+            score += 40
+        else:
+            score += 10  # Some points for trying
+
+        # Temperature suitability (20% weight)
+        if reqs['temperature']['min'] <= temperature <= reqs['temperature']['max']:
+            score += 20
+        else:
+            # Partial points for being close
+            temp_diff = min(abs(temperature - reqs['temperature']['min']),
+                          abs(temperature - reqs['temperature']['max']))
+            if temp_diff <= 5:
+                score += 10
+            elif temp_diff <= 10:
+                score += 5
+
+        # Humidity suitability (20% weight)
+        if reqs['humidity']['min'] <= humidity <= reqs['humidity']['max']:
+            score += 20
+        else:
+            # Partial points for being close
+            humid_diff = min(abs(humidity - reqs['humidity']['min']),
+                           abs(humidity - reqs['humidity']['max']))
+            if humid_diff <= 10:
+                score += 10
+            elif humid_diff <= 20:
+                score += 5
+
+        # Rainfall suitability (20% weight)
+        if reqs['rainfall']['min'] <= rainfall <= reqs['rainfall']['max']:
+            score += 20
+        else:
+            # Partial points for being close
+            rain_diff = min(abs(rainfall - reqs['rainfall']['min']),
+                          abs(rainfall - reqs['rainfall']['max']))
+            if rain_diff <= 100:
+                score += 10
+            elif rain_diff <= 200:
+                score += 5
+
+        # Combine ML probability with rule-based score
+        final_score = (probability * 0.6) + (score * 0.4)
+
+        recommendations.append({
+            "crop": crop,
+            "suitability_score": round(final_score, 1)
+        })
+
+    # Sort by suitability score (highest first)
+    recommendations.sort(key=lambda x: x['suitability_score'], reverse=True)
+
+    return recommendations
 
 def recommend_fertilizer(soil_texture, crop_type, nitrogen, phosphorus, potassium):
     fertilizer_recommendations = {
@@ -252,47 +356,37 @@ def predict():
     Soil Analysis and Crop Recommendation API
     ---
     parameters:
-      - name: image
-        in: formData
-        type: file
+      - name: body
+        in: body
         required: true
-        description: Image of the soil.
-      - name: temperature
-        in: formData
-        type: number
-        required: true
-        description: Current temperature in Celsius.
-      - name: humidity
-        in: formData
-        type: number
-        required: true
-        description: Current humidity percentage.
-      - name: rainfall
-        in: formData
-        type: number
-        required: true
-        description: Current rainfall in mm.
-      - name: crop_type
-        in: formData
-        type: string
-        required: true
-        enum: ['rice', 'Irish Potatoes', 'Tomatoes']
-        description: Target crop type.
-      - name: nitrogen
-        in: formData
-        type: number
-        required: true
-        description: Nitrogen content (mg/kg).
-      - name: phosphorus
-        in: formData
-        type: number
-        required: true
-        description: Phosphorus content (mg/kg).
-      - name: potassium
-        in: formData
-        type: number
-        required: true
-        description: Potassium content (mg/kg).
+        schema:
+          type: object
+          properties:
+            image:
+              type: string
+              description: Path to the soil image file.
+            temperature:
+              type: number
+              description: Current temperature in Celsius.
+            humidity:
+              type: number
+              description: Current humidity percentage.
+            rainfall:
+              type: number
+              description: Current rainfall in mm.
+            crop_type:
+              type: string
+              enum: ['rice', 'Irish Potatoes', 'Tomatoes']
+              description: Target crop type.
+            nitrogen:
+              type: number
+              description: Nitrogen content (mg/kg).
+            phosphorus:
+              type: number
+              description: Phosphorus content (mg/kg).
+            potassium:
+              type: number
+              description: Potassium content (mg/kg).
     responses:
       200:
         description: Prediction results.
@@ -322,32 +416,70 @@ def predict():
                   items:
                     type: string
     """
-    if 'image' not in request.files:
-        return jsonify({"error": "No image part"}), 400
+    # Handle both JSON and form data requests
+    if request.is_json:
+        # JSON request
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
 
-    file = request.files['image']
-    if file.filename == '':
-        return jsonify({"error": "No selected file"}), 400
+        image_path = data.get('image')
+        temperature = data.get('temperature')
+        humidity = data.get('humidity')
+        rainfall = data.get('rainfall')
+        crop_type = data.get('crop_type')
+        nitrogen = data.get('nitrogen')
+        phosphorus = data.get('phosphorus')
+        potassium = data.get('potassium')
 
-    # Get non-file data from form
+        if not image_path:
+            return jsonify({"error": "No image path provided"}), 400
+
+        if not os.path.exists(image_path):
+            return jsonify({"error": f"Image file not found: {image_path}"}), 400
+
+    else:
+        # Form data request (original)
+        if 'image' not in request.files:
+            return jsonify({"error": "No image part"}), 400
+
+        file = request.files['image']
+        if file.filename == '':
+            return jsonify({"error": "No selected file"}), 400
+
+        # Get non-file data from form
+        try:
+            temperature = float(request.form.get('temperature'))
+            humidity = float(request.form.get('humidity'))
+            rainfall = float(request.form.get('rainfall'))
+            crop_type = request.form.get('crop_type')
+            nitrogen = float(request.form.get('nitrogen'))
+            phosphorus = float(request.form.get('phosphorus'))
+            potassium = float(request.form.get('potassium'))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid or missing numerical parameters"}), 400
+
+        if not crop_type:
+            return jsonify({"error": "Missing crop_type"}), 400
+
+        # Save the file temporarily
+        filename = str(uuid.uuid4()) + "_" + file.filename
+        image_path = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(image_path)
+
+    # Validate parameters
     try:
-        temperature = float(request.form.get('temperature'))
-        humidity = float(request.form.get('humidity'))
-        rainfall = float(request.form.get('rainfall'))
-        crop_type = request.form.get('crop_type')
-        nitrogen = float(request.form.get('nitrogen'))
-        phosphorus = float(request.form.get('phosphorus'))
-        potassium = float(request.form.get('potassium'))
+        temperature = float(temperature)
+        humidity = float(humidity)
+        rainfall = float(rainfall)
+        nitrogen = float(nitrogen)
+        phosphorus = float(phosphorus)
+        potassium = float(potassium)
     except (TypeError, ValueError):
-        return jsonify({"error": "Invalid or missing numerical parameters"}), 400
+        return jsonify({"error": "Invalid numerical parameters"}), 400
 
     if not crop_type:
         return jsonify({"error": "Missing crop_type"}), 400
-
-    # Save the file temporarily
-    filename = str(uuid.uuid4()) + "_" + file.filename
-    image_path = os.path.join(UPLOAD_FOLDER, filename)
-    file.save(image_path)
 
     try:
         models, status = load_models()
@@ -356,10 +488,17 @@ def predict():
 
         soil_texture = predict_texture(image_path, models['texture'])
         crop_recommendations = recommend_crop(soil_texture, temperature, humidity, rainfall)
+
+        # Check if crop_recommendations contains an error
+        if isinstance(crop_recommendations, dict) and "error" in crop_recommendations:
+            return jsonify(crop_recommendations), 400
+
         fertilizer_recommendation = recommend_fertilizer(soil_texture, crop_type, nitrogen, phosphorus, potassium)
 
-        # Cleanup image after prediction (optional, but good for space)
-        # os.remove(image_path)
+        # Cleanup image after prediction if it was uploaded
+        if not request.is_json:
+            # os.remove(image_path)
+            pass
 
         return jsonify({
             "soil_texture": soil_texture,
