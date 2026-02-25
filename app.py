@@ -16,7 +16,7 @@ from sklearn.model_selection import train_test_split
 import os
 import joblib
 import uuid
-
+from data import CROP_SUITABILITY, FERTILIZER_RECOMMENDATIONS
 
 MODEL_PATH = 'soil_texture_mobilenetv2.keras'
 CROP_MODEL_PATH = 'crop_predictor.pkl'
@@ -33,28 +33,8 @@ UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def generate_synthetic_data():
-    crop_suitability = {
-        'rice': {
-            'soil_texture': ['alluvial', 'clayey'],
-            'temperature': {'min': 20, 'max': 35},
-            'humidity': {'min': 60, 'max': 90},
-            'rainfall': {'min': 800, 'max': 2000}
-        },
-        'Irish Potatoes': {
-            'soil_texture': ['loamy', 'sandy'],
-            'temperature': {'min': 15, 'max': 25},
-            'humidity': {'min': 60, 'max': 85},
-            'rainfall': {'min': 500, 'max': 700}
-        },
-        'Tomatoes': {
-            'soil_texture': ['sandy', 'loamy'],
-            'temperature': {'min': 18, 'max': 29},
-            'humidity': {'min': 50, 'max': 70},
-            'rainfall': {'min': 400, 'max': 600}
-        }
-    }
     data = []
-    for crop, reqs in crop_suitability.items():
+    for crop, reqs in CROP_SUITABILITY.items():
         for _ in range(1000):
             soil_texture = np.random.choice(reqs['soil_texture'])
             temperature = np.random.uniform(reqs['temperature']['min'] - 5, reqs['temperature']['max'] + 5)
@@ -91,14 +71,17 @@ def train_texture_model():
         os.makedirs(val_dir, exist_ok=True)
         for texture in ['sandy', 'loamy', 'clayey', 'alluvial']:
             os.makedirs(os.path.join(val_dir, texture), exist_ok=True)
+
     has_images = False
     for texture in ['sandy', 'loamy', 'clayey', 'alluvial']:
         texture_dir = os.path.join(train_dir, texture)
         if os.path.exists(texture_dir) and len(os.listdir(texture_dir)) > 0:
             has_images = True
             break
+
     if not has_images:
         return None
+
     textures = ['sandy', 'loamy', 'clayey', 'alluvial']
     train_datagen = ImageDataGenerator(
         rescale=1./255,
@@ -113,6 +96,7 @@ def train_texture_model():
         fill_mode='nearest'
     )
     val_datagen = ImageDataGenerator(rescale=1./255)
+
     train_generator = train_datagen.flow_from_directory(
         train_dir,
         target_size=IMG_SIZE,
@@ -125,6 +109,7 @@ def train_texture_model():
         batch_size=BATCH_SIZE,
         class_mode='categorical'
     )
+
     base_model = MobileNetV2(
         input_shape=(224, 224, 3),
         include_top=False,
@@ -133,15 +118,18 @@ def train_texture_model():
     base_model.trainable = True
     for layer in base_model.layers[:-20]:
         layer.trainable = False
+
     x = base_model.output
     x = GlobalAveragePooling2D()(x)
     x = Dense(256, activation='relu')(x)
     x = Dropout(0.5)(x)
     predictions = Dense(len(textures), activation='softmax')(x)
+
     model = Model(inputs=base_model.input, outputs=predictions)
     model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
     lr_scheduler = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, min_lr=1e-6)
-    history = model.fit(
+    model.fit(
         train_generator,
         steps_per_epoch=len(train_generator),
         epochs=20,
@@ -166,116 +154,55 @@ def predict_texture(img_path, model):
     return texture_classes[predicted_class[0]]
 
 def recommend_crop(soil_texture, temperature, humidity, rainfall):
-    # Check if soil texture is supported
     supported_textures = ['sandy', 'loamy', 'clayey', 'alluvial']
     if soil_texture not in supported_textures:
         return {
             "error": f"Unsupported soil texture: '{soil_texture}'. Our system currently supports: {', '.join(supported_textures)}.",
-            "message": "For specialized soil types not in our dataset, we recommend consulting with local agricultural advisors who can provide personalized recommendations based on your specific soil conditions.",
+            "message": "For specialized soil types not in our dataset, we recommend consulting with local agricultural advisors.",
             "supported_textures": supported_textures
         }
 
-    if not os.path.exists(CROP_MODEL_PATH) or not os.path.exists(SCALER_PATH) or not os.path.exists(LABEL_ENCODER_PATH):
+    if not all(os.path.exists(p) for p in [CROP_MODEL_PATH, SCALER_PATH, LABEL_ENCODER_PATH]):
         crop_model = train_crop_model()
     else:
         crop_model = joblib.load(CROP_MODEL_PATH)
         scaler = joblib.load(SCALER_PATH)
         label_encoder = joblib.load(LABEL_ENCODER_PATH)
 
-    # Get all possible crops
-    all_crops = ['rice', 'Irish Potatoes', 'Tomatoes']
+    all_crops = list(CROP_SUITABILITY.keys())
     recommendations = []
 
     for crop in all_crops:
-        input_data = pd.DataFrame([[soil_texture, temperature, humidity, rainfall]],
-                                 columns=['soil_texture', 'temperature', 'humidity', 'rainfall'])
-        input_data['soil_texture'] = label_encoder.transform([soil_texture])[0]
-        input_data[['temperature', 'humidity', 'rainfall']] = scaler.transform(input_data[['temperature', 'humidity', 'rainfall']])
-
-        # Get prediction probability for this crop
-        probabilities = crop_model.predict_proba(input_data)[0]
-        crop_classes = crop_model.classes_
-
-        # Find the probability for this specific crop
-        if crop in crop_classes:
-            crop_index = list(crop_classes).index(crop)
-            probability = probabilities[crop_index] * 100  # Convert to percentage
-        else:
-            probability = 0.0
-
-        # Calculate suitability score based on environmental factors
-        crop_requirements = {
-            'rice': {
-                'soil_texture': ['alluvial', 'clayey'],
-                'temperature': {'min': 20, 'max': 35},
-                'humidity': {'min': 60, 'max': 90},
-                'rainfall': {'min': 800, 'max': 2000}
-            },
-            'Irish Potatoes': {
-                'soil_texture': ['loamy', 'sandy'],
-                'temperature': {'min': 15, 'max': 25},
-                'humidity': {'min': 60, 'max': 85},
-                'rainfall': {'min': 500, 'max': 700}
-            },
-            'Tomatoes': {
-                'soil_texture': ['sandy', 'loamy'],
-                'temperature': {'min': 18, 'max': 29},
-                'humidity': {'min': 50, 'max': 70},
-                'rainfall': {'min': 400, 'max': 600}
-            }
-        }
-
-        reqs = crop_requirements[crop]
+        reqs = CROP_SUITABILITY[crop]
         score = 0.0
 
-        # Soil texture suitability (40% weight)
+        # Soil texture suitability (40% weight) - MUST match for high score
         if soil_texture in reqs['soil_texture']:
             score += 40
         else:
-            score += 10  # Some points for trying
+            score += 0  # No points if soil texture doesn't match
 
-        # Temperature suitability (20% weight)
+        # Temperature suitability (20% weight) - MUST be in range
         if reqs['temperature']['min'] <= temperature <= reqs['temperature']['max']:
             score += 20
         else:
-            # Partial points for being close
-            temp_diff = min(abs(temperature - reqs['temperature']['min']),
-                          abs(temperature - reqs['temperature']['max']))
-            if temp_diff <= 5:
-                score += 10
-            elif temp_diff <= 10:
-                score += 5
+            score += 0  # No points if outside range
 
-        # Humidity suitability (20% weight)
+        # Humidity suitability (20% weight) - MUST be in range
         if reqs['humidity']['min'] <= humidity <= reqs['humidity']['max']:
             score += 20
         else:
-            # Partial points for being close
-            humid_diff = min(abs(humidity - reqs['humidity']['min']),
-                           abs(humidity - reqs['humidity']['max']))
-            if humid_diff <= 10:
-                score += 10
-            elif humid_diff <= 20:
-                score += 5
+            score += 0  # No points if outside range
 
-        # Rainfall suitability (20% weight)
+        # Rainfall suitability (20% weight) - MUST be in range
         if reqs['rainfall']['min'] <= rainfall <= reqs['rainfall']['max']:
             score += 20
         else:
-            # Partial points for being close
-            rain_diff = min(abs(rainfall - reqs['rainfall']['min']),
-                          abs(rainfall - reqs['rainfall']['max']))
-            if rain_diff <= 100:
-                score += 10
-            elif rain_diff <= 200:
-                score += 5
-
-        # Combine ML probability with rule-based score
-        final_score = (probability * 0.6) + (score * 0.4)
+            score += 0  # No points if outside range
 
         recommendations.append({
             "crop": crop,
-            "suitability_score": round(final_score, 1)
+            "suitability_score": score
         })
 
     # Sort by suitability score (highest first)
@@ -284,49 +211,29 @@ def recommend_crop(soil_texture, temperature, humidity, rainfall):
     return recommendations
 
 def recommend_fertilizer(soil_texture, crop_type, nitrogen, phosphorus, potassium):
-    fertilizer_recommendations = {
-        'rice': {
-            'sandy': {'NPK 10-10-10': 'Low nitrogen content. Good for initial growth stages.'},
-            'loamy': {'Urea': 'High in nitrogen, good for vegetative growth of rice in loamy soil.'},
-            'clayey': {'Ammonium Sulfate': 'Provides nitrogen and sulfur, good for clayey soils.'},
-            'alluvial': {'DAP': 'High phosphorus content helps in root development in alluvial soils.'}
-        },
-        'Irish Potatoes': {
-            'sandy': {'NPK 5-10-10': 'Low nitrogen, high potassium for tuber development in sandy soil.'},
-            'loamy': {'NPK 10-20-20': 'Balanced for overall growth, with focus on tuber development.'},
-            'clayey': {'Triple Super Phosphate': 'High phosphorus helps with root development in heavy soil.'},
-            'alluvial': {'MOP': 'High potassium content for improving quality and disease resistance.'}
-        },
-        'Tomatoes': {
-            'sandy': {'NPK 5-10-5': 'Balanced nutrients with focus on phosphorus for flowering.'},
-            'loamy': {'NPK 8-32-16': 'High phosphorus promotes flowering and fruiting in tomatoes.'},
-            'clayey': {'Single Super Phosphate': 'Good for breaking down clayey soil and providing phosphorus.'},
-            'alluvial': {'NPK 12-12-17': 'Higher potassium content for fruit development and quality.'}
-        }
-    }
     n_level = "Low" if nitrogen < 50 else "Medium" if nitrogen < 100 else "High"
     p_level = "Low" if phosphorus < 25 else "Medium" if phosphorus < 50 else "High"
     k_level = "Low" if potassium < 25 else "Medium" if potassium < 50 else "High"
+
     try:
-        base_fertilizer = list(fertilizer_recommendations[crop_type][soil_texture].keys())[0]
-        base_description = fertilizer_recommendations[crop_type][soil_texture][base_fertilizer]
+        base_fertilizer = list(FERTILIZER_RECOMMENDATIONS[crop_type][soil_texture].keys())[0]
+        base_description = FERTILIZER_RECOMMENDATIONS[crop_type][soil_texture][base_fertilizer]
     except KeyError:
         return {
             "fertilizer": "Unknown",
-            "reason": "No fertilizer recommendation found for the given crop and soil texture combination."
+            "reason": "No recommendation found for this combination."
         }
-    additional_recommendations = []
-    if n_level == "Low":
-        additional_recommendations.append("Consider adding urea or ammonium sulfate to increase nitrogen levels.")
-    if p_level == "Low":
-        additional_recommendations.append("Add bone meal or rock phosphate to improve phosphorus content.")
-    if k_level == "Low":
-        additional_recommendations.append("Apply potash or wood ash to increase potassium levels.")
+
+    additional = []
+    if n_level == "Low": additional.append("Add urea or ammonium sulfate.")
+    if p_level == "Low": additional.append("Add bone meal or rock phosphate.")
+    if k_level == "Low": additional.append("Apply potash or wood ash.")
+
     return {
         "recommended_fertilizer": base_fertilizer,
         "description": base_description,
         "soil_npk_status": f"N: {n_level}, P: {p_level}, K: {k_level}",
-        "additional_recommendations": additional_recommendations
+        "additional_recommendations": additional
     }
 
 def load_models():
@@ -334,18 +241,14 @@ def load_models():
     if os.path.exists(MODEL_PATH):
         try:
             models['texture'] = load_model(MODEL_PATH)
-        except Exception as e:
-            model = train_texture_model()
-            if model:
-                models['texture'] = model
-            else:
-                return None, "Failed to train the texture model"
+        except:
+            models['texture'] = train_texture_model()
     else:
-        model = train_texture_model()
-        if model:
-            models['texture'] = model
-        else:
-            return None, "Failed to train the texture model"
+        models['texture'] = train_texture_model()
+
+    if not models['texture']:
+        return None, "Texture model error"
+
     if not os.path.exists(CROP_MODEL_PATH):
         train_crop_model()
     return models, True
@@ -364,65 +267,28 @@ def predict():
           properties:
             image:
               type: string
-              description: Path to the soil image file.
             temperature:
               type: number
-              description: Current temperature in Celsius.
             humidity:
               type: number
-              description: Current humidity percentage.
             rainfall:
               type: number
-              description: Current rainfall in mm.
+            nitrogen:
+              type: number
+            phosphorus:
+              type: number
+            potassium:
+              type: number
             crop_type:
               type: string
               enum: ['rice', 'Irish Potatoes', 'Tomatoes']
-              description: Target crop type.
-            nitrogen:
-              type: number
-              description: Nitrogen content (mg/kg).
-            phosphorus:
-              type: number
-              description: Phosphorus content (mg/kg).
-            potassium:
-              type: number
-              description: Potassium content (mg/kg).
+              description: Optional - only needed for fertilizer recommendations
     responses:
       200:
-        description: Prediction results.
-        schema:
-          properties:
-            soil_texture:
-              type: string
-            crop_recommendations:
-              type: array
-              items:
-                properties:
-                  crop:
-                    type: string
-                  suitability_score:
-                    type: number
-            fertilizer_recommendation:
-              type: object
-              properties:
-                recommended_fertilizer:
-                  type: string
-                description:
-                  type: string
-                soil_npk_status:
-                  type: string
-                additional_recommendations:
-                  type: array
-                  items:
-                    type: string
+        description: Success
     """
-    # Handle both JSON and form data requests
     if request.is_json:
-        # JSON request
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
-
+        data = request.get_json() or {}
         image_path = data.get('image')
         temperature = data.get('temperature')
         humidity = data.get('humidity')
@@ -432,22 +298,13 @@ def predict():
         phosphorus = data.get('phosphorus')
         potassium = data.get('potassium')
 
-        if not image_path:
-            return jsonify({"error": "No image path provided"}), 400
-
-        if not os.path.exists(image_path):
-            return jsonify({"error": f"Image file not found: {image_path}"}), 400
-
+        if not image_path or not os.path.exists(image_path):
+            return jsonify({"error": "Invalid image path"}), 400
     else:
-        # Form data request (original)
         if 'image' not in request.files:
-            return jsonify({"error": "No image part"}), 400
+            return jsonify({"error": "No image"}), 400
 
         file = request.files['image']
-        if file.filename == '':
-            return jsonify({"error": "No selected file"}), 400
-
-        # Get non-file data from form
         try:
             temperature = float(request.form.get('temperature'))
             humidity = float(request.form.get('humidity'))
@@ -456,30 +313,11 @@ def predict():
             nitrogen = float(request.form.get('nitrogen'))
             phosphorus = float(request.form.get('phosphorus'))
             potassium = float(request.form.get('potassium'))
-        except (TypeError, ValueError):
-            return jsonify({"error": "Invalid or missing numerical parameters"}), 400
+        except:
+            return jsonify({"error": "Invalid parameters"}), 400
 
-        if not crop_type:
-            return jsonify({"error": "Missing crop_type"}), 400
-
-        # Save the file temporarily
-        filename = str(uuid.uuid4()) + "_" + file.filename
-        image_path = os.path.join(UPLOAD_FOLDER, filename)
+        image_path = os.path.join(UPLOAD_FOLDER, f"{uuid.uuid4()}_{file.filename}")
         file.save(image_path)
-
-    # Validate parameters
-    try:
-        temperature = float(temperature)
-        humidity = float(humidity)
-        rainfall = float(rainfall)
-        nitrogen = float(nitrogen)
-        phosphorus = float(phosphorus)
-        potassium = float(potassium)
-    except (TypeError, ValueError):
-        return jsonify({"error": "Invalid numerical parameters"}), 400
-
-    if not crop_type:
-        return jsonify({"error": "Missing crop_type"}), 400
 
     try:
         models, status = load_models()
@@ -489,16 +327,14 @@ def predict():
         soil_texture = predict_texture(image_path, models['texture'])
         crop_recommendations = recommend_crop(soil_texture, temperature, humidity, rainfall)
 
-        # Check if crop_recommendations contains an error
         if isinstance(crop_recommendations, dict) and "error" in crop_recommendations:
             return jsonify(crop_recommendations), 400
 
-        fertilizer_recommendation = recommend_fertilizer(soil_texture, crop_type, nitrogen, phosphorus, potassium)
-
-        # Cleanup image after prediction if it was uploaded
-        if not request.is_json:
-            # os.remove(image_path)
-            pass
+        fertilizer_recommendation = None
+        if crop_type:
+            fertilizer_recommendation = recommend_fertilizer(soil_texture, crop_type, nitrogen, phosphorus, potassium)
+        else:
+            fertilizer_recommendation = {"message": "Provide crop_type for fertilizer recommendations"}
 
         return jsonify({
             "soil_texture": soil_texture,
@@ -510,7 +346,5 @@ def predict():
 
 if __name__ == "__main__":
     models, status = load_models()
-    if not models:
-        print(f"Error: {status}")
-    else:
+    if models:
         app.run(debug=True)

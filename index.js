@@ -41,21 +41,17 @@ document.getElementById('predictForm').addEventListener('submit', async (e) => {
 
         const result = await response.json();
 
-        // Update texture
         const textureBadge = document.getElementById('textureBadge');
         textureBadge.textContent = (result.soil_texture.charAt(0).toUpperCase() + result.soil_texture.slice(1)) + " Soil";
 
-        // Update crop
         const cropResult = document.getElementById('cropResult');
         const bestCrop = result.crop_recommendations[0];
         cropResult.textContent = `${bestCrop.crop} (Suitability: ${bestCrop.suitability_score}%)`;
 
-        // Update fertilizer
         const fertilizerResult = document.getElementById('fertilizerResult');
         const fert = result.fertilizer_recommendation;
         fertilizerResult.innerHTML = `<strong>${fert.recommended_fertilizer}</strong><br><small>${fert.description}</small>`;
 
-        // Update tips
         const tipsList = document.getElementById('tipsList');
         tipsList.innerHTML = '';
         if (fert.additional_recommendations && fert.additional_recommendations.length > 0) {
