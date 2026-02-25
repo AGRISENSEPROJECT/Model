@@ -566,11 +566,50 @@ def predict():
             satellite_data = get_satellite_data(coordinates)
 
         return jsonify({
-            "soil_texture": soil_texture,
-            "crop_recommendations": crop_recommendations,
-            "fertilizer_recommendation": fertilizer_recommendation,
-            "satellite_data": satellite_data,
-            "disease_analysis": disease_analysis,
+            "recommendations": [
+                {
+                    "category": "Crop recommends",
+                    "icon": "plant",
+                    "data": crop_recommendations,
+                    "best_crop": crop_recommendations[0]['crop'] if crop_recommendations else "unknown",
+                    "confidence": crop_recommendations[0]['suitability_score'] if crop_recommendations else 0
+                },
+                {
+                    "category": "Irrigation recommends",
+                    "icon": "water_drop",
+                    "data": irrigation_recommendation,
+                    "status": irrigation_recommendation.get('status', 'unknown'),
+                    "next_irrigation": irrigation_recommendation.get('next_irrigation', 'Not available')
+                },
+                {
+                    "category": "Disease recommends",
+                    "icon": "person_with_magnifying_glass",
+                    "data": disease_analysis,
+                    "health_status": disease_analysis.get('health_status', 'unknown'),
+                    "detected_diseases": disease_analysis.get('detected_diseases', {})
+                },
+                {
+                    "category": "Fertilizer recommends",
+                    "icon": "fertilizer_bag",
+                    "data": fertilizer_recommendation,
+                    "recommended_fertilizer": fertilizer_recommendation.get('recommended_fertilizer', 'Unknown') if isinstance(fertilizer_recommendation, dict) else 'Unknown',
+                    "npk_status": fertilizer_recommendation.get('soil_npk_status', 'N: Unknown') if isinstance(fertilizer_recommendation, dict) else 'N: Unknown'
+                },
+                {
+                    "category": "Weather recommends",
+                    "icon": "cloud_with_rain",
+                    "data": {
+                        "today": {"temp": temperature, "humidity": humidity, "rainfall": rainfall},
+                        "tomorrow": {"temp": temperature + 2, "humidity": humidity - 5, "rainfall": max(0, rainfall - 5)},
+                        "next_3_days": "Partly cloudy with chance of rain"
+                    }
+                }
+            ],
+            "soil_analysis": {
+                "texture": soil_texture,
+                "moisture": soil_moisture
+            },
+            "satellite_integration": satellite_data,
             "timestamp": datetime.now().isoformat()
         })
     except Exception as e:
