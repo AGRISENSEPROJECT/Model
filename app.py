@@ -16,7 +16,13 @@ from sklearn.model_selection import train_test_split
 import os
 import joblib
 import uuid
-from data import CROP_SUITABILITY, FERTILIZER_RECOMMENDATIONS
+import requests
+from datetime import datetime, timedelta
+
+from data.crop_data import CROP_SUITABILITY
+from data.fertilizer_data import FERTILIZER_RECOMMENDATIONS
+from data.disease_data import DISEASE_PATTERNS, CROP_DISEASES
+from data.irrigation_data import CROP_WATER_NEEDS, SOIL_MOISTURE_THRESHOLDS
 
 MODEL_PATH = 'soil_texture_mobilenetv2.keras'
 CROP_MODEL_PATH = 'crop_predictor.pkl'
@@ -210,6 +216,75 @@ def recommend_crop(soil_texture, temperature, humidity, rainfall):
 
     return recommendations
 
+def detect_disease(image_path, crop_type):
+    try:
+        img = load_img(image_path, target_size=(224, 224))
+        img_array = img_to_array(img) / 255.0
+        img_array = np.expand_dims(img_array, axis=0)
+
+        # Disease detection feature - WAITING FOR SATELLITE DATA
+        # Currently no dataset available - using placeholder logic
+        # Once satellite integration is active, real CNN predictions will work
+
+        return {
+            'status': 'satellite_integration_pending',
+            'message': 'Disease detection waiting for satellite data integration',
+            'current_capability': 'placeholder_only',
+            'available_diseases': CROP_DISEASES.get(crop_type, []),
+            'satellite_status': {
+                'data_source': 'pending_satellite_imagery',
+                'prediction_accuracy': 'will_improve_with_real_data',
+                'eta': 'Available once satellite API is integrated'
+            },
+            'placeholder_info': {
+                'note': 'Currently showing disease patterns database',
+                'real_predictions': 'Requires satellite imagery dataset'
+            }
+        }
+    except Exception as e:
+        return {'error': f'Disease detection failed: {str(e)}'}
+
+def recommend_irrigation(soil_moisture, crop_type, temperature, humidity, rainfall):
+    try:
+        if crop_type not in CROP_WATER_NEEDS:
+            return {'error': f'Crop type {crop_type} not supported for irrigation recommendations'}
+
+        crop_needs = CROP_WATER_NEEDS[crop_type]
+        optimal = crop_needs['optimal_moisture']
+        critical = crop_needs['critical_moisture']
+
+        # Calculate irrigation need
+        if soil_moisture <= critical:
+            urgency = 'immediate'
+            next_irrigation = 'Today, 6 AM'
+            water_amount = crop_needs['daily_water_mm'] * 1.5
+        elif soil_moisture < optimal:
+            urgency = 'soon'
+            next_irrigation = 'Tomorrow, 6 AM'
+            water_amount = crop_needs['daily_water_mm']
+        else:
+            urgency = 'none'
+            next_irrigation = 'No immediate irrigation needed'
+            water_amount = 0
+
+        # Adjust for weather conditions
+        if rainfall > 10:
+            water_amount *= 0.7  # Reduce if recent rainfall
+
+        if temperature > 35:
+            water_amount *= 1.2  # Increase in extreme heat
+
+        return {
+            'status': urgency,
+            'next_irrigation': next_irrigation,
+            'recommended_water_mm': round(water_amount, 1),
+            'soil_moisture': soil_moisture,
+            'optimal_moisture': optimal,
+            'weather_adjustment': f"Reduced by 30% due to rainfall" if rainfall > 10 else "Increased by 20% due to heat" if temperature > 35 else "No adjustment"
+        }
+    except Exception as e:
+        return {'error': f'Irrigation recommendation failed: {str(e)}'}
+
 def recommend_fertilizer(soil_texture, crop_type, nitrogen, phosphorus, potassium):
     n_level = "Low" if nitrogen < 50 else "Medium" if nitrogen < 100 else "High"
     p_level = "Low" if phosphorus < 25 else "Medium" if phosphorus < 50 else "High"
@@ -253,10 +328,10 @@ def load_models():
         train_crop_model()
     return models, True
 
-@app.route('/predict', methods=['POST'])
-def predict():
+@app.route('/comprehensive-analyze', methods=['POST'])
+def comprehensive_analyze():
     """
-    Soil Analysis and Crop Recommendation API
+    Comprehensive Agricultural Analysis API
     ---
     parameters:
       - name: body
@@ -279,13 +354,15 @@ def predict():
               type: number
             potassium:
               type: number
+            soil_moisture:
+              type: number
             crop_type:
               type: string
               enum: ['rice', 'Irish Potatoes', 'Tomatoes']
-              description: Optional - only needed for fertilizer recommendations
+              description: Optional - AI will auto-detect best crop if not provided
     responses:
       200:
-        description: Success
+        description: Comprehensive analysis results
     """
     if request.is_json:
         data = request.get_json() or {}
@@ -293,10 +370,148 @@ def predict():
         temperature = data.get('temperature')
         humidity = data.get('humidity')
         rainfall = data.get('rainfall')
-        crop_type = data.get('crop_type')
         nitrogen = data.get('nitrogen')
         phosphorus = data.get('phosphorus')
         potassium = data.get('potassium')
+        soil_moisture = data.get('soil_moisture', 50)  # Default if not provided
+        crop_type = data.get('crop_type')
+    else:
+        if 'image' not in request.files:
+            return jsonify({"error": "No image"}), 400
+
+        file = request.files['image']
+        try:
+            temperature = float(request.form.get('temperature'))
+            humidity = float(request.form.get('humidity'))
+            rainfall = float(request.form.get('rainfall'))
+            nitrogen = float(request.form.get('nitrogen'))
+            phosphorus = float(request.form.get('phosphorus'))
+            potassium = float(request.form.get('potassium'))
+            soil_moisture = float(request.form.get('soil_moisture', 50))
+            crop_type = request.form.get('crop_type')
+        except:
+            return jsonify({"error": "Invalid parameters"}), 400
+
+        image_path = os.path.join(UPLOAD_FOLDER, f"{uuid.uuid4()}_{file.filename}")
+        file.save(image_path)
+
+    try:
+        models, status = load_models()
+        if not models:
+            return jsonify({"error": status}), 500
+
+        # Soil texture analysis
+        soil_texture = predict_texture(image_path, models['texture'])
+
+        # Crop recommendations
+        crop_recommendations = recommend_crop(soil_texture, temperature, humidity, rainfall)
+        if isinstance(crop_recommendations, dict) and "error" in crop_recommendations:
+            return jsonify(crop_recommendations), 400
+
+        # Disease detection
+        disease_analysis = detect_disease(image_path, crop_recommendations[0]['crop'] if crop_recommendations else 'unknown')
+
+        # Irrigation recommendations
+        irrigation_recommendation = recommend_irrigation(soil_moisture, crop_recommendations[0]['crop'] if crop_recommendations else 'unknown', temperature, humidity, rainfall)
+
+        # Fertilizer recommendations
+        fertilizer_recommendation = None
+        if crop_type:
+            fertilizer_recommendation = recommend_fertilizer(soil_texture, crop_type, nitrogen, phosphorus, potassium)
+        else:
+            fertilizer_recommendation = {"message": "Provide crop_type for fertilizer recommendations"}
+
+        # Weather forecast (placeholder - would integrate with real API)
+        weather_forecast = {
+            "today": {"temp": temperature, "humidity": humidity, "rainfall": rainfall},
+            "tomorrow": {"temp": temperature + 2, "humidity": humidity - 5, "rainfall": max(0, rainfall - 5)},
+            "next_3_days": "Partly cloudy with chance of rain"
+        }
+
+        # Satellite integration status
+        satellite_status = {
+            "disease_detection": "pending_satellite_data",
+            "irrigation_monitoring": "ready_with_ground_sensors",
+            "crop_health_monitoring": "pending_ndvi_integration",
+            "data_sources": {
+                "current": ["ground_sensors", "user_input", "manual_images"],
+                "planned": ["sentinel_2", "landsat_8", "modis"],
+                "eta": "once_apis_integrated"
+            }
+        }
+
+        return jsonify({
+            "soil_analysis": {
+                "texture": soil_texture,
+                "moisture": soil_moisture
+            },
+            "crop_recommendations": crop_recommendations,
+            "disease_analysis": disease_analysis,
+            "irrigation_recommendation": irrigation_recommendation,
+            "fertilizer_recommendation": fertilizer_recommendation,
+            "weather_forecast": weather_forecast,
+            "satellite_integration": satellite_status,
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/predict', methods=['POST'])
+def predict():
+    """
+    Soil Analysis and Crop Recommendation API with Satellite Integration
+    ---
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            image:
+              type: string
+            temperature:
+              type: number
+            humidity:
+              type: number
+            rainfall:
+              type: number
+            nitrogen:
+              type: number
+            phosphorus:
+              type: number
+            potassium:
+              type: number
+            soil_moisture:
+              type: number
+            crop_type:
+              type: string
+              enum: ['rice', 'Irish Potatoes', 'Tomatoes']
+              description: Optional - AI will auto-detect best crop if not provided
+            coordinates:
+              type: object
+              properties:
+                lat:
+                  type: number
+                lon:
+                  type: number
+              description: Field coordinates for satellite data
+    responses:
+      200:
+        description: Prediction results with satellite integration
+    """
+    if request.is_json:
+        data = request.get_json() or {}
+        image_path = data.get('image')
+        temperature = data.get('temperature')
+        humidity = data.get('humidity')
+        rainfall = data.get('rainfall')
+        nitrogen = data.get('nitrogen')
+        phosphorus = data.get('phosphorus')
+        potassium = data.get('potassium')
+        soil_moisture = data.get('soil_moisture', 50)
+        crop_type = data.get('crop_type')
+        coordinates = data.get('coordinates')
 
         if not image_path or not os.path.exists(image_path):
             return jsonify({"error": "Invalid image path"}), 400
@@ -309,10 +524,15 @@ def predict():
             temperature = float(request.form.get('temperature'))
             humidity = float(request.form.get('humidity'))
             rainfall = float(request.form.get('rainfall'))
-            crop_type = request.form.get('crop_type')
             nitrogen = float(request.form.get('nitrogen'))
             phosphorus = float(request.form.get('phosphorus'))
             potassium = float(request.form.get('potassium'))
+            soil_moisture = float(request.form.get('soil_moisture', 50))
+            crop_type = request.form.get('crop_type')
+            # Get coordinates from form if available
+            lat = request.form.get('lat')
+            lon = request.form.get('lon')
+            coordinates = {'lat': float(lat), 'lon': float(lon)} if lat and lon else None
         except:
             return jsonify({"error": "Invalid parameters"}), 400
 
@@ -325,24 +545,62 @@ def predict():
             return jsonify({"error": status}), 500
 
         soil_texture = predict_texture(image_path, models['texture'])
-        crop_recommendations = recommend_crop(soil_texture, temperature, humidity, rainfall)
 
+        crop_recommendations = recommend_crop(soil_texture, temperature, humidity, rainfall)
         if isinstance(crop_recommendations, dict) and "error" in crop_recommendations:
             return jsonify(crop_recommendations), 400
 
-        fertilizer_recommendation = None
-        if crop_type:
-            fertilizer_recommendation = recommend_fertilizer(soil_texture, crop_type, nitrogen, phosphorus, potassium)
-        else:
-            fertilizer_recommendation = {"message": "Provide crop_type for fertilizer recommendations"}
+        best_crop = crop_recommendations[0]['crop'] if crop_recommendations else 'unknown'
+
+        disease_analysis = detect_disease(image_path, best_crop)
+
+        # Irrigation recommendations (use best crop)
+        irrigation_recommendation = recommend_irrigation(soil_moisture, best_crop, temperature, humidity, rainfall)
+
+        # Fertilizer recommendations (auto-use best crop)
+        fertilizer_recommendation = recommend_fertilizer(soil_texture, best_crop, nitrogen, phosphorus, potassium)
+
+        # Satellite data integration
+        satellite_data = None
+        if coordinates:
+            satellite_data = get_satellite_data(coordinates)
 
         return jsonify({
             "soil_texture": soil_texture,
             "crop_recommendations": crop_recommendations,
-            "fertilizer_recommendation": fertilizer_recommendation
+            "fertilizer_recommendation": fertilizer_recommendation,
+            "satellite_data": satellite_data,
+            "disease_analysis": disease_analysis,
+            "timestamp": datetime.now().isoformat()
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+def get_satellite_data(coordinates):
+    """Get satellite data for field coordinates"""
+    try:
+        # Placeholder for satellite API integration
+        # In production, this would call Sentinel-2, Landsat-8 APIs
+
+        return {
+            "status": "integration_ready",
+            "coordinates": coordinates,
+            "data_sources": ["sentinel_2", "landsat_8", "modis"],
+            "current_capability": "placeholder",
+            "available_data": {
+                "ndvi": "pending_api_integration",
+                "field_health": "pending_ndvi_analysis",
+                "historical_imagery": "available_once_connected"
+            },
+            "api_status": {
+                "sentinel_2": "free_registration_required",
+                "landsat_8": "free_account_needed",
+                "modis": "direct_access_available"
+            },
+            "next_steps": "Configure API keys for real satellite imagery"
+        }
+    except Exception as e:
+        return {"error": f"Satellite data failed: {str(e)}"}
 
 if __name__ == "__main__":
     models, status = load_models()
