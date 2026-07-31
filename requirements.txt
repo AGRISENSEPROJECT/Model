@@ -157,7 +157,7 @@ rfc3986-validator
 rich
 rpds-py
 rsa
-scikit-learn
+scikit-learn==1.6.1
 scipy
 Send2Trash
 simple-websocket
@@ -170,7 +170,6 @@ starlette
 tensorboard
 tensorboard-data-server
 tensorflow
-tensorflow-io-gcs-filesystem
 termcolor
 terminado
 threadpoolctl
