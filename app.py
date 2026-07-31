@@ -333,36 +333,127 @@ def comprehensive_analyze():
     """
     Comprehensive Agricultural Analysis API
     ---
+    tags:
+      - Analysis
+    consumes:
+      - multipart/form-data
     parameters:
-      - name: body
-        in: body
+      - name: image
+        in: formData
+        type: file
         required: true
-        schema:
-          type: object
-          properties:
-            image:
-              type: string
-            temperature:
-              type: number
-            humidity:
-              type: number
-            rainfall:
-              type: number
-            nitrogen:
-              type: number
-            phosphorus:
-              type: number
-            potassium:
-              type: number
-            soil_moisture:
-              type: number
-            crop_type:
-              type: string
-              enum: ['rice', 'Irish Potatoes', 'Tomatoes']
-              description: Optional - AI will auto-detect best crop if not provided
+        description: Photo of the soil (jpg/png). Used to classify soil texture.
+      - name: temperature
+        in: formData
+        type: number
+        required: true
+        description: Air temperature in degrees Celsius
+      - name: humidity
+        in: formData
+        type: number
+        required: true
+        description: Relative humidity in percent
+      - name: rainfall
+        in: formData
+        type: number
+        required: true
+        description: Rainfall in mm
+      - name: nitrogen
+        in: formData
+        type: number
+        required: true
+        description: Soil nitrogen level (kg/ha)
+      - name: phosphorus
+        in: formData
+        type: number
+        required: true
+        description: Soil phosphorus level (kg/ha)
+      - name: potassium
+        in: formData
+        type: number
+        required: true
+        description: Soil potassium level (kg/ha)
+      - name: soil_moisture
+        in: formData
+        type: number
+        required: false
+        default: 50
+        description: Soil moisture in percent (defaults to 50)
+      - name: crop_type
+        in: formData
+        type: string
+        required: false
+        enum: ['rice', 'Irish Potatoes', 'Tomatoes']
+        description: Required for fertilizer recommendations, otherwise optional
     responses:
       200:
         description: Comprehensive analysis results
+        schema:
+          type: object
+          properties:
+            soil_analysis:
+              type: object
+              properties:
+                texture:
+                  type: string
+                  enum: ['sandy', 'loamy', 'clayey', 'alluvial']
+                moisture:
+                  type: number
+            crop_recommendations:
+              type: array
+              items:
+                type: object
+                properties:
+                  crop:
+                    type: string
+                  suitability_score:
+                    type: number
+            disease_analysis:
+              type: object
+            irrigation_recommendation:
+              type: object
+            fertilizer_recommendation:
+              type: object
+            weather_forecast:
+              type: object
+            satellite_integration:
+              type: object
+            timestamp:
+              type: string
+        examples:
+          application/json:
+            soil_analysis: {texture: "loamy", moisture: 45}
+            crop_recommendations:
+              - {crop: "Irish Potatoes", suitability_score: 100.0}
+              - {crop: "Tomatoes", suitability_score: 80.0}
+              - {crop: "rice", suitability_score: 40.0}
+            disease_analysis:
+              status: "satellite_integration_pending"
+              message: "Disease detection waiting for satellite data integration"
+            irrigation_recommendation:
+              status: "soon"
+              next_irrigation: "Tomorrow, 6 AM"
+              recommended_water_mm: 5.0
+              soil_moisture: 45
+              optimal_moisture: 60
+              weather_adjustment: "No adjustment"
+            fertilizer_recommendation:
+              recommended_fertilizer: "NPK 17-17-17"
+              description: "Balanced fertilizer for loamy soil"
+              soil_npk_status: "N: Low, P: Medium, K: High"
+              additional_recommendations: ["Add urea or ammonium sulfate."]
+            weather_forecast:
+              today: {temp: 22.0, humidity: 70.0, rainfall: 5.0}
+              tomorrow: {temp: 24.0, humidity: 65.0, rainfall: 0}
+              next_3_days: "Partly cloudy with chance of rain"
+            satellite_integration:
+              disease_detection: "pending_satellite_data"
+              irrigation_monitoring: "ready_with_ground_sensors"
+            timestamp: "2026-07-31T18:00:00.000000"
+      400:
+        description: Missing/invalid parameters or unsupported soil texture
+      500:
+        description: Model loading or prediction error
     """
     if request.is_json:
         data = request.get_json() or {}
@@ -461,44 +552,146 @@ def predict():
     """
     Soil Analysis and Crop Recommendation API with Satellite Integration
     ---
+    tags:
+      - Prediction
+    consumes:
+      - multipart/form-data
     parameters:
-      - name: body
-        in: body
+      - name: image
+        in: formData
+        type: file
         required: true
-        schema:
-          type: object
-          properties:
-            image:
-              type: string
-            temperature:
-              type: number
-            humidity:
-              type: number
-            rainfall:
-              type: number
-            nitrogen:
-              type: number
-            phosphorus:
-              type: number
-            potassium:
-              type: number
-            soil_moisture:
-              type: number
-            crop_type:
-              type: string
-              enum: ['rice', 'Irish Potatoes', 'Tomatoes']
-              description: Optional - AI will auto-detect best crop if not provided
-            coordinates:
-              type: object
-              properties:
-                lat:
-                  type: number
-                lon:
-                  type: number
-              description: Field coordinates for satellite data
+        description: Photo of the soil (jpg/png). Used to classify soil texture.
+      - name: temperature
+        in: formData
+        type: number
+        required: true
+        description: Air temperature in degrees Celsius
+      - name: humidity
+        in: formData
+        type: number
+        required: true
+        description: Relative humidity in percent
+      - name: rainfall
+        in: formData
+        type: number
+        required: true
+        description: Rainfall in mm
+      - name: nitrogen
+        in: formData
+        type: number
+        required: true
+        description: Soil nitrogen level (kg/ha)
+      - name: phosphorus
+        in: formData
+        type: number
+        required: true
+        description: Soil phosphorus level (kg/ha)
+      - name: potassium
+        in: formData
+        type: number
+        required: true
+        description: Soil potassium level (kg/ha)
+      - name: soil_moisture
+        in: formData
+        type: number
+        required: false
+        default: 50
+        description: Soil moisture in percent (defaults to 50)
+      - name: crop_type
+        in: formData
+        type: string
+        required: false
+        enum: ['rice', 'Irish Potatoes', 'Tomatoes']
+        description: Optional - AI will auto-detect best crop if not provided
+      - name: lat
+        in: formData
+        type: number
+        required: false
+        description: Optional field latitude for satellite data
+      - name: lon
+        in: formData
+        type: number
+        required: false
+        description: Optional field longitude for satellite data
     responses:
       200:
         description: Prediction results with satellite integration
+        schema:
+          type: object
+          properties:
+            recommendations:
+              type: array
+              description: One block per category (crop, irrigation, disease, fertilizer, weather)
+              items:
+                type: object
+                properties:
+                  category:
+                    type: string
+                  icon:
+                    type: string
+                  data:
+                    type: object
+            soil_analysis:
+              type: object
+              properties:
+                texture:
+                  type: string
+                  enum: ['sandy', 'loamy', 'clayey', 'alluvial']
+                moisture:
+                  type: number
+            satellite_integration:
+              type: object
+            timestamp:
+              type: string
+        examples:
+          application/json:
+            recommendations:
+              - category: "Crop recommends"
+                icon: "plant"
+                data:
+                  - {crop: "Irish Potatoes", suitability_score: 100.0}
+                  - {crop: "rice", suitability_score: 40.0}
+                best_crop: "Irish Potatoes"
+                confidence: 100.0
+              - category: "Irrigation recommends"
+                icon: "water_drop"
+                data:
+                  status: "soon"
+                  next_irrigation: "Tomorrow, 6 AM"
+                  recommended_water_mm: 5.0
+                  soil_moisture: 45
+                  optimal_moisture: 60
+                  weather_adjustment: "No adjustment"
+                status: "soon"
+                next_irrigation: "Tomorrow, 6 AM"
+              - category: "Disease recommends"
+                icon: "person_with_magnifying_glass"
+                data:
+                  status: "satellite_integration_pending"
+                  message: "Disease detection waiting for satellite data integration"
+              - category: "Fertilizer recommends"
+                icon: "fertilizer_bag"
+                data:
+                  recommended_fertilizer: "NPK 17-17-17"
+                  description: "Balanced fertilizer for loamy soil"
+                  soil_npk_status: "N: Low, P: Medium, K: High"
+                  additional_recommendations: ["Add urea or ammonium sulfate."]
+                recommended_fertilizer: "NPK 17-17-17"
+                npk_status: "N: Low, P: Medium, K: High"
+              - category: "Weather recommends"
+                icon: "cloud_with_rain"
+                data:
+                  today: {temp: 22.0, humidity: 70.0, rainfall: 5.0}
+                  tomorrow: {temp: 24.0, humidity: 65.0, rainfall: 0}
+                  next_3_days: "Partly cloudy with chance of rain"
+            soil_analysis: {texture: "loamy", moisture: 45}
+            satellite_integration: null
+            timestamp: "2026-07-31T18:00:00.000000"
+      400:
+        description: Missing/invalid parameters or unsupported soil texture
+      500:
+        description: Model loading or prediction error
     """
     if request.is_json:
         data = request.get_json() or {}
