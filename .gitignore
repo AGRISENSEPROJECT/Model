@@ -7,7 +7,6 @@ uploads/
 .pytest_cache/
 .mypy_cache/
 .env
-artifacts/soil_validation_report.json
 # GitHub rejects files >100MB — train locally: scripts/train_environmental_models.py
 artifacts/yield_predictor.pkl
 data/retrain/inbox/*
