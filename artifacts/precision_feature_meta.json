@@ -1,0 +1,31 @@
+{
+  "n_rows": 36520,
+  "n_features": 15,
+  "numeric_features": [
+    "soil_ph",
+    "nitrogen",
+    "phosphorus",
+    "potassium",
+    "soil_moisture_vwc",
+    "precip_accum_mm",
+    "temperature_c",
+    "temp_max_c",
+    "temp_min_c",
+    "relative_humidity",
+    "wind_speed",
+    "gdd",
+    "et0_mm"
+  ],
+  "categorical_features": [
+    "soil_texture",
+    "crop_id"
+  ],
+  "domains": [
+    "soil",
+    "weather"
+  ],
+  "model": "gbr",
+  "yield_r2": 0.9751413348690768,
+  "yield_mae": 2.554525043176437,
+  "baseline_mae": 22.232355546290567
+}

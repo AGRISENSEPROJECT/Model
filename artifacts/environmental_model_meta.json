@@ -1,0 +1,42 @@
+{
+  "n_rows": 36520,
+  "crops": [
+    "Barley",
+    "Corn",
+    "Cotton",
+    "Potato",
+    "Rice",
+    "Soybean",
+    "Sugarcane",
+    "Sunflower",
+    "Tomato",
+    "Wheat"
+  ],
+  "soils": [
+    "Clay",
+    "Loamy",
+    "Peaty",
+    "Saline",
+    "Sandy"
+  ],
+  "yield": {
+    "r2": 0.9760076226379091,
+    "mae": 2.3219106036136834,
+    "baseline_mae": 22.232355546290567
+  },
+  "soil_quality": {
+    "r2": 1.0,
+    "mae": 4.87807433487876e-14
+  },
+  "feature_cols": [
+    "Soil_Type",
+    "Crop_Type",
+    "Soil_pH",
+    "Temperature",
+    "Humidity",
+    "Wind_Speed",
+    "N",
+    "P",
+    "K"
+  ]
+}

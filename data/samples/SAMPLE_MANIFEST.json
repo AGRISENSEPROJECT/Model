@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "note": "Provisional human visual labels for root soil*.jpeg files. Confirm with scripts/classify_samples.py after TF is installed.",
+  "samples": [
+    {
+      "source": "soil1.jpeg",
+      "path": "data/samples/loamy/soil1_seedling_loam.jpeg",
+      "provisional_label": "loamy",
+      "rationale": "Dark crumbly friable aggregates around seedling"
+    },
+    {
+      "source": "soil2.jpeg",
+      "path": "data/samples/loamy/soil2_hands_loam.jpeg",
+      "provisional_label": "loamy",
+      "rationale": "Dark moist crumbly soil held in hands"
+    },
+    {
+      "source": "soil3.jpeg",
+      "path": "data/samples/clayey/soil3_profile_clayey.jpeg",
+      "provisional_label": "clayey",
+      "rationale": "Profile with cohesive clods and drying cracks"
+    },
+    {
+      "source": "soil4.jpeg",
+      "path": "data/samples/loamy/soil4_topdown_loam.jpeg",
+      "provisional_label": "loamy",
+      "rationale": "Top-down friable dark aggregates"
+    },
+    {
+      "source": "cass.jpeg",
+      "path": "data/samples/pending_review/cass.jpeg",
+      "provisional_label": null,
+      "rationale": "Cassava/plant photo — not a clean soil texture sample"
+    }
+  ]
+}

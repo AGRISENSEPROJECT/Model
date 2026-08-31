@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agrisense JSON Playground</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/playground.css">
+</head>
+<body>
+  <div class="container playground">
+    <header>
+      <h1>JSON Playground</h1>
+      <p>POST <strong>soil sensors</strong> + <code>coordinates</code> — weather fills from OpenWeatherMap. No target crop needed.</p>
+      <p><a href="/">← Back to upload UI</a> · <a href="/feature-schema" target="_blank">Feature schema</a> · <a href="/sample-request" target="_blank">Sample JSON</a> · <a href="/apidocs" target="_blank">Swagger</a></p>
+    </header>
+
+    <div class="playground-grid">
+      <div class="card">
+        <h3>Request JSON</h3>
+        <p class="hint">Leave <code>crop_type</code> out. Use <code>soil_texture</code> to skip image upload while testing.</p>
+        <textarea id="requestBody" spellcheck="false"></textarea>
+        <div class="actions">
+          <button type="button" id="loadSample">Load sample</button>
+          <button type="button" id="sendBtn" class="primary">Send POST /predict</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Response JSON</h3>
+        <pre id="responseBody">{}</pre>
+      </div>
+    </div>
+  </div>
+  <script src="/static/js/playground.js"></script>
+</body>
+</html>

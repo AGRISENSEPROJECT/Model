@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agrisense | Soil Analysis & Recommendations</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <p>Analyzing soil conditions...</p>
+    </div>
+
+    <div class="container">
+        <header>
+            <h1>Agrisense AI</h1>
+            <p>Smart soil analysis for sustainable farming</p>
+        </header>
+
+        <form id="predictForm">
+            <div class="analysis-grid">
+                <div class="card">
+                    <h3>Soil Sample</h3>
+                    <div class="upload-area" onclick="document.getElementById('imageInput').click()">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                        </svg>
+                        <p>Click to upload soil image</p>
+                        <span id="fileName" style="font-size: 0.8rem; color: var(--text-dim); display: block; margin-top: 0.5rem;">No file selected</span>
+                        <input type="file" id="imageInput" name="image" accept="image/*" required style="display: none;">
+                    </div>
+                    <img id="imagePreview" alt="Preview">
+                </div>
+
+                <div class="card">
+                    <h3>Conditions</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div class="form-group">
+                            <label>Soil pH (optional)</label>
+                            <input type="number" name="soil_ph" step="0.1" placeholder="auto from soil">
+                        </div>
+                        <div class="form-group">
+                            <label>Wind speed (optional)</label>
+                            <input type="number" name="wind_speed" step="0.1" placeholder="10">
+                        </div>
+                        <div class="form-group">
+                            <label>Temp (°C)</label>
+                            <input type="number" name="temperature" step="0.1" value="25" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Humidity (%)</label>
+                            <input type="number" name="humidity" step="0.1" value="60" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Rainfall (mm)</label>
+                        <input type="number" name="rainfall" step="0.1" value="800" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Soil moisture (%)</label>
+                        <input type="number" name="soil_moisture" step="0.1" value="50" required>
+                    </div>
+                    <p style="color: var(--text-dim); font-size: 0.85rem; margin-top: 0.5rem;">
+                        No crop to pick — the model auto-ranks all crops.
+                        <a href="/playground" style="color: var(--accent);">JSON playground →</a>
+                    </p>
+                </div>
+
+                <div class="card">
+                    <h3>NPK Levels</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;">
+                        <div class="form-group">
+                            <label>N</label>
+                            <input type="number" name="nitrogen" step="0.1" value="80" required>
+                        </div>
+                        <div class="form-group">
+                            <label>P</label>
+                            <input type="number" name="phosphorus" step="0.1" value="40" required>
+                        </div>
+                        <div class="form-group">
+                            <label>K</label>
+                            <input type="number" name="potassium" step="0.1" value="45" required>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" style="display: flex; align-items: center; justify-content: center; border: none; background: transparent;">
+                    <button type="submit">Run Analysis</button>
+                </div>
+            </div>
+        </form>
+
+        <section class="results-section" id="resultsSection">
+            <div class="results-card">
+                <div class="result-header">
+                    <h2>Analysis Results</h2>
+                    <span class="badge" id="textureBadge">Soil</span>
+                </div>
+                <div class="recommendation-grid">
+                    <div class="rec-item">
+                        <h4>Optimal Crop (ML)</h4>
+                        <p id="cropResult">—</p>
+                    </div>
+                    <div class="rec-item">
+                        <h4>Fertilizer Recommendation</h4>
+                        <p id="fertilizerResult">—</p>
+                    </div>
+                    <div class="rec-item" style="grid-column: span 2;">
+                        <h4>Additional Tips</h4>
+                        <ul id="tipsList" style="list-style: none; margin-top: 0.5rem; color: var(--text-dim);"></ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

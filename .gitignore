@@ -1,6 +1,17 @@
-# created by virtualenv automatically
-__pycache__
-venv
-.venv
-./flask.py
+__pycache__/
+*.py[cod]
+venv/
+.venv/
 uploads/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.env
+artifacts/soil_validation_report.json
+# GitHub rejects files >100MB — train locally: scripts/train_environmental_models.py
+artifacts/yield_predictor.pkl
+data/retrain/inbox/*
+!data/retrain/inbox/.gitkeep
+data/retrain/human_labeled/**/*
+!data/retrain/human_labeled/**/.gitkeep
+data/retrain/rejected/*
