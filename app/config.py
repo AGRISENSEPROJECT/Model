@@ -51,12 +51,21 @@ CROP_DISPLAY_NAMES = {
     "irish_potatoes": "Irish Potatoes",
     "tomatoes": "Tomatoes",
     "wheat": "Wheat",
-    "corn": "Corn",
+    "corn": "Maize",
     "barley": "Barley",
     "soybean": "Soybean",
     "cotton": "Cotton",
     "sugarcane": "Sugarcane",
     "sunflower": "Sunflower",
+    "beans": "Beans",
+    "cassava": "Cassava",
+    "banana": "Banana",
+    "sorghum": "Sorghum",
+    "sweet_potato": "Sweet Potato",
+    "coffee": "Coffee",
+    "tea": "Tea",
+    "groundnut": "Groundnut",
+    "pea": "Pea",
 }
 
 # Legacy aliases from older API / UI payloads
@@ -77,6 +86,19 @@ CROP_ALIASES = {
     "cotton": "cotton",
     "sugarcane": "sugarcane",
     "sunflower": "sunflower",
+    "beans": "beans",
+    "bean": "beans",
+    "cassava": "cassava",
+    "banana": "banana",
+    "sorghum": "sorghum",
+    "sweet potato": "sweet_potato",
+    "sweet_potato": "sweet_potato",
+    "coffee": "coffee",
+    "tea": "tea",
+    "groundnut": "groundnut",
+    "groundnuts": "groundnut",
+    "pea": "pea",
+    "peas": "pea",
 }
 
 

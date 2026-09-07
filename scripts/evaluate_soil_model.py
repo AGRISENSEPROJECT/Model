@@ -40,7 +40,7 @@ def execute_validation_audit(
     print("\n--- SYSTEM CORE CONFIGURATIONS ---")
     print("Keras Detected Directory Order mapping:", val_set.class_indices)
     save_class_indices(val_set.class_indices, SOIL_CLASS_INDICES_PATH)
-    print(f"Synced class map → {SOIL_CLASS_INDICES_PATH}")
+    print(f"Synced class map -> {SOIL_CLASS_INDICES_PATH}")
 
     runtime_map = load_class_indices()
     print("Runtime inference map:", runtime_map)

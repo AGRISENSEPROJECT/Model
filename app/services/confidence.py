@@ -14,6 +14,9 @@ def _level(score: float) -> str:
     return "very_low"
 
 
+CNN_CONFIDENCE_FLOOR = 0.55
+
+
 def compute_recommendation_confidence(
     *,
     feature_provenance: dict[str, str] | None,
@@ -23,6 +26,8 @@ def compute_recommendation_confidence(
     model_name: str,
     crop_score_spread: float | None = None,
     dataset_calibrated: bool = False,
+    soil_texture_confidence: float | None = None,
+    soil_texture_label: str | None = None,
 ) -> dict[str, Any]:
     """
     Score 0–100 based on how much input is live vs defaulted.
@@ -62,6 +67,15 @@ def compute_recommendation_confidence(
         factors.append("Soil texture unknown — add photo scan or lab data")
     elif has_soil_texture_cnn:
         factors.append("Soil texture from image CNN")
+        cnn_conf = float(soil_texture_confidence or 0.0)
+        if cnn_conf < CNN_CONFIDENCE_FLOOR:
+            score -= 18
+            factors.append(
+                f"Soil CNN confidence {cnn_conf:.0%} is below the {CNN_CONFIDENCE_FLOOR:.0%} production floor"
+            )
+        if (soil_texture_label or "").lower() == "sandy" and cnn_conf < 0.70:
+            score -= 8
+            factors.append("Sandy class has historically low recall — treat this texture with caution")
 
     if not dataset_calibrated:
         score -= 10
