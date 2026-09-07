@@ -8,10 +8,10 @@ _BASE = {
         "alluvial": {"DAP": "High phosphorus content helps in root development in alluvial soils."},
     },
     "irish_potatoes": {
-        "sandy": {"NPK 5-10-10": "Low nitrogen, high potassium for tuber development in sandy soil."},
-        "loamy": {"NPK 10-20-20": "Balanced for overall growth, with focus on tuber development."},
-        "clayey": {"Triple Super Phosphate": "High phosphorus helps with root development in heavy soil."},
-        "alluvial": {"MOP": "High potassium content for improving quality and disease resistance."},
+        "sandy": {"NPK 17-17-17 + Urea": "RAB/CIP highland potato: NPK at planting, urea at hilling on light volcanic sand."},
+        "loamy": {"NPK 17-17-17 + Urea": "Musanze volcanic loam: NPK 17-17-17 plus split urea (RAB potato pack)."},
+        "clayey": {"DAP + MOP + Urea": "Heavy clay needs extra K; DAP and MOP at planting."},
+        "alluvial": {"NPK 17-17-17": "Valley potato: balanced NPK; keep ridges well drained."},
     },
     "tomatoes": {
         "sandy": {"NPK 5-10-5": "Balanced nutrients with focus on phosphorus for flowering."},
@@ -22,10 +22,10 @@ _BASE = {
 }
 
 _GENERIC_TEXTURES = {
-    "sandy": {"NPK 10-10-10": "Balanced starter blend suited to sandy, leach-prone soils."},
-    "loamy": {"NPK 15-15-15": "Balanced maintenance blend for productive loamy soils."},
-    "clayey": {"NPK 12-12-17": "Slightly higher K to support structure and fruiting on clay."},
-    "alluvial": {"NPK 14-14-14": "All-purpose blend for fertile alluvial soils."},
+    "sandy": {"DAP + Urea": "CIP pack for light Eastern Rwanda soils: DAP at planting, urea topdress."},
+    "loamy": {"DAP + Urea": "OFRA Rwanda medium soil: about 41 kg N and 46 kg P2O5/ha for cereals."},
+    "clayey": {"DAP + Urea": "Clay holds K; DAP plus urea is the standard CIP blend."},
+    "alluvial": {"DAP + Urea + MOP": "Marshland soils may need extra K if residues are removed."},
 }
 
 _NEW_CROPS = (

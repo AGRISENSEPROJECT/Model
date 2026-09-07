@@ -1,0 +1,20 @@
+crop_id,display_name,family,seasons,soils,temp_min,temp_max,rain_min,rain_max,humidity_min,humidity_max,ph_min,ph_max,n_opt,p_opt,k_opt,typical_yield_t_ha,farmgate_rwf_kg,price_source,rwanda_priority,ml_backed,perennial,provinces,notes
+corn,Maize,cereal,A|B,loamy|clayey|alluvial|sandy,16,28,500,1200,55,85,5.2,7.2,80,50,50,2.2,350,MINAGRI farmgate / market 2026,1.0,1,0,Northern|Southern|Eastern|Kigali|Western,NISR SAS 2023 maize >508000 t
+beans,Beans,legume,A|B|C,loamy|clayey|sandy,16,28,400,1100,55,85,5.5,7.0,40,40,40,0.7,1123,FAOSTAT producer May 2026,1.0,0,0,Northern|Southern|Eastern|Kigali|Western,NISR SAS 2023 beans >441000 t; N-fixing rotation crop
+irish_potatoes,Irish Potatoes,tuber,A|B|C,loamy|sandy|clayey,10,20,700,1400,65,90,5.0,6.5,90,80,120,8.2,512,FAOSTAT producer Jan 2024,1.0,1,0,Northern|Western,NISR yield 8.2 t/ha season A; avoid after tomato
+cassava,Cassava,tuber,A|B,sandy|loamy|clayey,18,32,700,1800,55,85,5.0,7.0,50,30,80,13.5,180,Indicative East Africa farmgate 2026,1.0,0,0,Eastern|Southern|Western,NISR SAS 2023 cassava >1.34 Mt
+banana,Banana,perennial,A|B|C,loamy|alluvial|clayey,16,30,900,2000,60,90,5.5,7.0,80,40,150,8.5,250,Indicative Rwanda market 2026,1.0,0,1,Western|Southern|Eastern|Kigali,NISR SAS 2024B banana ~1.14 Mt
+rice,Rice,cereal,B|C,alluvial|clayey|loamy,20,35,800,2000,60,90,5.5,7.0,90,40,40,3.5,954,FAOSTAT producer May 2026,1.0,1,0,Southern|Eastern|Kigali,Marshland seasons B/C; Huye Gisagara
+tomatoes,Tomatoes,vegetable,A|B|C,sandy|loamy|clayey,16,28,400,900,50,80,5.8,7.0,80,60,80,12.0,450,Indicative peri-urban market 2026,0.95,1,0,Kigali|Northern|Southern,High income if water and disease managed; not after potato
+wheat,Wheat,cereal,A|B,loamy|clayey|sandy,12,22,500,1100,50,80,5.5,7.0,70,50,40,1.5,600,Indicative 2026,0.85,1,0,Northern,Highland Northern belt
+soybean,Soybean,legume,B|C,loamy|clayey,18,30,450,800,55,80,5.5,7.0,40,50,50,1.0,700,Indicative 2026,0.9,1,0,Southern|Eastern|Kigali,Good cereal follow crop
+sorghum,Sorghum,cereal,A|B,sandy|loamy|clayey,18,32,400,900,45,75,5.5,7.5,50,40,40,1.2,400,Indicative Eastern plateau 2026,0.9,0,0,Eastern,Drought-tolerant Bugesera/Nyagatare
+sweet_potato,Sweet Potato,tuber,A|C,sandy|loamy,16,30,500,1200,55,85,5.2,6.8,40,40,80,6.0,220,Indicative 2026,0.9,0,0,Northern|Eastern|Southern|Kigali,Food-security crop; sandy soils OK
+coffee,Coffee,perennial,A|B|C,loamy|clayey,16,24,1000,1800,60,85,5.0,6.5,60,40,80,0.8,2800,Indicative parchment 2026,0.8,0,1,Western|Southern,Shade perennial; Western/Southern hills
+tea,Tea,perennial,A|B|C,loamy|clayey,13,20,1200,2000,70,90,4.5,5.8,80,40,80,1.5,400,Indicative green leaf 2026,0.75,0,1,Western|Northern,Nyabihu/Nyamasheke highlands
+groundnut,Groundnut,legume,A|B,sandy|loamy,18,32,450,900,50,75,5.5,7.0,30,40,40,0.8,900,Indicative 2026,0.85,0,0,Eastern,Sandy Eastern soils; N-fixing
+pea,Pea,legume,A|B|C,loamy|clayey,10,20,600,1200,60,85,5.5,7.0,40,40,40,1.1,800,Indicative highland 2026,0.8,0,0,Northern,Cool Northern highlands
+barley,Barley,cereal,A|B,loamy|sandy|clayey,12,24,350,700,55,85,6.0,7.5,60,40,40,1.4,500,Indicative 2026,0.45,1,0,Northern,Limited Rwanda area
+sunflower,Sunflower,oilseed,A|B,loamy|sandy,18,30,400,700,45,75,6.0,7.5,50,50,50,1.3,650,Indicative 2026,0.5,1,0,Eastern,Oilseed option on well-drained soil
+cotton,Cotton,oilseed,A|B,loamy|clayey|alluvial,20,35,500,1000,50,80,5.8,7.5,70,50,50,1.2,700,Indicative 2026,0.3,1,0,Eastern,Low Rwanda CIP priority
+sugarcane,Sugarcane,cereal,A|B,loamy|alluvial|clayey,20,35,1000,2000,60,90,5.5,7.5,90,50,80,40.0,80,Indicative mill cane 2026,0.3,1,0,Eastern|Southern,Marsh/irrigation; bulky low price

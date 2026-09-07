@@ -5,6 +5,7 @@ from typing import Any
 
 from app.features.vector import merge_domains
 from app.services.confidence import compute_recommendation_confidence
+from app.services.crop_ranker import conditions_from_blocks, rank_crops
 from app.services.crop_recommender import recommend_crops
 from app.services.disease import detect_disease
 from app.services.environmental import (
@@ -28,7 +29,7 @@ def get_satellite_data(coordinates: dict[str, float] | None) -> dict[str, Any] |
     return {
         "status": "optional",
         "coordinates": coordinates,
-        "note": "NDVI/satellite still pending; weather uses OpenWeatherMap when lat/lon set",
+        "note": "NDVI/satellite still pending; weather uses OpenWeatherMap or Open-Meteo when lat/lon set",
     }
 
 
@@ -58,12 +59,12 @@ def run_comprehensive_analysis(
     soil: dict[str, Any] | None = None,
     weather: dict[str, Any] | None = None,
     flat: dict[str, Any] | None = None,
-    history: dict[str, Any] | None = None,  # ignored — reserved for future
-    economic: dict[str, Any] | None = None,  # ignored
+    history: dict[str, Any] | None = None,
+    economic: dict[str, Any] | None = None,
     production_mode: bool = False,
 ) -> dict[str, Any]:
     """
-    Lean path: soil sensors + OpenWeatherMap (when coordinates given).
+    Soil + weather ML yield, then Rwanda season, rotation, and farmgate income ranking.
     production_mode=True: no fake sensor defaults; honest confidence when data missing.
     """
     flat_input: dict[str, Any] = dict(flat or {})
@@ -94,10 +95,11 @@ def run_comprehensive_analysis(
             bundle = fetch_weather_bundle(float(coordinates["lat"]), float(coordinates["lon"]))
             for k, v in bundle["weather"].items():
                 weather_block.setdefault(k, v)
-            weather_meta = bundle["openweathermap"]
+            weather_meta = bundle.get("openweathermap") or {}
+            weather_meta["provider"] = bundle.get("provider") or weather_meta.get("provider")
             has_weather_api = True
         except Exception as exc:  # noqa: BLE001
-            weather_meta = {"error": str(exc), "provider": "openweathermap"}
+            weather_meta = {"error": str(exc), "provider": "unavailable"}
 
     soil_block = dict(soil or {})
     feedback_record = None
@@ -141,9 +143,10 @@ def run_comprehensive_analysis(
             "class_index_source": "unknown",
         }
 
-    provided = _collect_provided_keys(soil_block, weather_block, flat_input)
+    provided = _collect_provided_keys(soil_block, weather_block, flat_input, history, economic)
     feature_payload = None
     ranking_source = "none"
+    ranking_meta = None
 
     merged_preview = merge_domains(
         soil=soil_block,
@@ -153,6 +156,7 @@ def run_comprehensive_analysis(
         allow_weather_defaults=not production_mode or not has_weather_api,
     )
 
+    ml_rows = None
     if precision_ready():
         feature_payload = recommend_crops_precision(
             soil=soil_block,
@@ -160,12 +164,12 @@ def run_comprehensive_analysis(
             flat=flat_input,
             provided_keys=provided,
             production_mode=production_mode,
+            top_k=10,
         )
-        crop_recommendations = feature_payload["crop_recommendations"]
-        ranking_source = "precision_ml_yield_ranker"
+        ml_rows = feature_payload["crop_recommendations"]
     elif not production_mode:
         texture = soil_cnn.get("texture") or "loamy"
-        crop_recommendations = recommend_crops(
+        ml_rows = recommend_crops(
             texture,
             float(flat_input.get("temperature") or weather_block.get("temperature_c") or 24),
             float(flat_input.get("humidity") or weather_block.get("relative_humidity") or 70),
@@ -178,12 +182,39 @@ def run_comprehensive_analysis(
             use_ml=True,
             prefer_environmental=True,
         )
-        ranking_source = crop_recommendations[0]["source"] if crop_recommendations else "none"
     else:
         raise RuntimeError(
             "Precision ML model artifacts missing — cannot run production analysis. "
             "Run scripts/train_precision_crop_model.py"
         )
+
+    conditions = conditions_from_blocks(
+        soil=soil_block,
+        weather=weather_block,
+        merged=merged_preview,
+        history=history,
+        coordinates=coordinates,
+    )
+    ranked = rank_crops(
+        conditions=conditions,
+        ml_rows=ml_rows,
+        history=history,
+        economic=economic,
+        top_k=8,
+    )
+    crop_recommendations = ranked["crop_recommendations"]
+    ranking_source = "multi_factor_ranker"
+    ranking_meta = {
+        "season": ranked.get("season"),
+        "season_label": ranked.get("season_label"),
+        "province": ranked.get("province"),
+        "previous_crop": ranked.get("previous_crop"),
+        "maximize_income": ranked.get("maximize_income"),
+        "weights": ranked.get("weights"),
+        "income_maximizing_crop": ranked.get("income_maximizing_crop"),
+        "crop_rotation_plan": ranked.get("crop_rotation_plan"),
+        "factors_used": ranked.get("factors_used"),
+    }
 
     best = crop_recommendations[0] if crop_recommendations else None
     best_crop_id = best["crop_id"] if best else None
@@ -266,6 +297,8 @@ def run_comprehensive_analysis(
             - crop_recommendations[1]["suitability_score"]
         )
 
+    cnn_confidence = float(soil_cnn.get("confidence") or 0.0)
+    low_cnn = has_soil_texture_cnn and cnn_confidence < 0.55
     confidence = compute_recommendation_confidence(
         feature_provenance=(feature_payload or {}).get("feature_provenance"),
         has_weather_api=has_weather_api,
@@ -274,18 +307,26 @@ def run_comprehensive_analysis(
         model_name=ranking_source,
         crop_score_spread=score_spread,
         dataset_calibrated=False,
+        soil_texture_confidence=cnn_confidence if has_soil_texture_cnn else None,
+        soil_texture_label=soil_cnn.get("texture"),
     )
 
     for crop in crop_recommendations:
         crop["confidence_level"] = confidence["level"]
-        crop["explanation"] = (
-            f"Ranked by ML predicted yield under measured soil conditions "
-            f"(confidence: {confidence['level']})."
-        )
+        if not crop.get("explanation"):
+            crop["explanation"] = (
+                f"Ranked from soil, season, rotation, yield, and market price "
+                f"(confidence: {confidence['level']})."
+            )
 
     ai_input_log = {
         "sensor": split_sensor_log(soil_block, flat_input),
         "weather": weather_block,
+        "history": history or {},
+        "economic": {
+            "maximize_income": (economic or {}).get("maximize_income", True),
+            "price_overrides": list((economic or {}).get("market_prices") or {}),
+        },
         "feature_provenance": (feature_payload or {}).get("feature_provenance"),
         "production_mode": production_mode,
     }
@@ -303,6 +344,12 @@ def run_comprehensive_analysis(
             "environmental_quality": env_quality,
             "ph_measured": flat_input.get("soil_ph") is not None,
             "ph_note": "pH not measured by RS485 probe unless lab_ph provided",
+            "low_confidence": low_cnn,
+            "production_warning": (
+                f"Soil CNN confidence {cnn_confidence:.0%} is below the 55% production floor"
+                if low_cnn
+                else None
+            ),
         },
         "nutrient_analysis": nutrient_analysis,
         "crop_recommendations": crop_recommendations,
@@ -320,14 +367,15 @@ def run_comprehensive_analysis(
             "Data Validation",
             "Backend Ingest",
             "Feature Processing",
-            "ML Crop Ranker",
+            "ML Yield Estimate",
+            "Season Rotation Income Ranker",
             "Nutrient & Irrigation Analysis",
             "Crop Recommendation",
         ],
         "weather_forecast": {
             "features": weather_block,
             "openweathermap": weather_meta,
-            "note": "Pass coordinates.lat/lon for live weather from OpenWeatherMap",
+            "note": "Pass coordinates.lat/lon for live weather (OpenWeatherMap or Open-Meteo)",
         },
         "model_stack": {
             "soil_texture": soil_cnn.get("class_index_source"),
@@ -336,10 +384,16 @@ def run_comprehensive_analysis(
             "fertilizer": "data_driven_npk_percentiles",
             "irrigation": "dynamic_moisture_et0",
             "disease": "not_trained",
-            "domains": ["soil", "weather"],
+            "domains": ["soil", "weather", "history", "economic"],
             "crop_type_provided": bool(requested),
             "hardcoded_rules": False,
         },
+        "season": (ranking_meta or {}).get("season"),
+        "season_label": (ranking_meta or {}).get("season_label"),
+        "province": (ranking_meta or {}).get("province"),
+        "income_maximizing_crop": (ranking_meta or {}).get("income_maximizing_crop"),
+        "crop_rotation_plan": (ranking_meta or {}).get("crop_rotation_plan") or [],
+        "ranking_factors": ranking_meta,
         "retrain_capture": feedback_record,
         "satellite_integration": get_satellite_data(coordinates),
         "timestamp": datetime.now().isoformat(),
@@ -378,6 +432,14 @@ def build_predict_response(analysis: dict[str, Any]) -> dict[str, Any]:
         "soil_analysis": analysis["soil_analysis"],
         "nutrient_analysis": analysis.get("nutrient_analysis"),
         "crop_recommendations": crops,
+        "best_crop": analysis.get("best_crop"),
+        "best_crop_id": analysis.get("best_crop_id"),
+        "season": analysis.get("season"),
+        "season_label": analysis.get("season_label"),
+        "province": analysis.get("province"),
+        "income_maximizing_crop": analysis.get("income_maximizing_crop"),
+        "crop_rotation_plan": analysis.get("crop_rotation_plan") or [],
+        "ranking_factors": analysis.get("ranking_factors"),
         "fertilizer_recommendation": fertilizer,
         "feature_array": analysis.get("feature_array"),
         "feature_provenance": analysis.get("feature_provenance"),
@@ -396,6 +458,17 @@ def build_predict_response(analysis: dict[str, Any]) -> dict[str, Any]:
                 "confidence": confidence.get("score"),
                 "confidence_level": confidence.get("level"),
                 "predicted_yield": crops[0].get("predicted_yield") if crops else None,
+                "expected_income_rwf_ha": crops[0].get("expected_income_rwf_ha") if crops else None,
+            },
+            {
+                "category": "Income and rotation",
+                "icon": "payments",
+                "data": {
+                    "income_maximizing_crop": analysis.get("income_maximizing_crop"),
+                    "crop_rotation_plan": analysis.get("crop_rotation_plan"),
+                    "season": analysis.get("season"),
+                    "season_label": analysis.get("season_label"),
+                },
             },
             {
                 "category": "Soil nutrients",

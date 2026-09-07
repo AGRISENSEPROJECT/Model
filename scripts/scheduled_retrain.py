@@ -79,17 +79,29 @@ def run(force: bool = False, epochs: int = 15) -> dict:
 
     train_soil(epochs=epochs)
     metrics = execute_validation_audit()
+    from app.services.production_ready import soil_retrain_gate
+
+    gate = soil_retrain_gate(metrics)
     report["validation_accuracy"] = metrics.get("accuracy")
+    report["sandy_recall"] = gate["sandy_recall"]
+    report["promotion_gate"] = gate
     report["finished_at"] = datetime.now(timezone.utc).isoformat()
 
     state = {
         "last_retrain_at": report["finished_at"],
-        "last_retrain_status": "ok",
+        "last_retrain_status": "ok" if gate["ok"] else "rejected_gate",
         "last_reason": reason,
         "last_validation_accuracy": metrics.get("accuracy"),
+        "last_sandy_recall": gate["sandy_recall"],
         "last_promote": promo,
+        "gate_reasons": gate["reasons"],
     }
     RETRAIN_STATE.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    if not gate["ok"]:
+        report["warning"] = (
+            "Retrain finished but was not promoted as production-ready: "
+            + "; ".join(gate["reasons"])
+        )
     print(json.dumps(report, indent=2))
     return report
 

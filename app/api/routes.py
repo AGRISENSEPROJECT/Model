@@ -14,6 +14,7 @@ from app.services.feedback_store import (
     reject_sample,
     retrain_status,
 )
+from app.services.production_ready import production_status
 from app.services.sensor_ingest import ingest_sensor_reading
 from app.utils.auth import sensor_api_key_error, sensor_api_key_valid
 from app.utils.uploads import ensure_upload_dir, save_upload
@@ -30,6 +31,14 @@ SAMPLE_BODY = {
         "soil_moisture_vwc": 50,
     },
     "coordinates": {"lat": -1.9441, "lon": 30.0619},
+    "history": {
+        "previous_crop": "maize",
+        "season": "A",
+        "province": "Kigali",
+    },
+    "economic": {
+        "maximize_income": True,
+    },
 }
 
 
@@ -152,9 +161,37 @@ def _extract_request_payload():
     }
 
 
+def _truthy(value) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _falsy(value) -> bool:
+    return str(value).strip().lower() in {"0", "false", "no", "off"}
+
+
+def _production_mode_from_request() -> bool:
+    """Production is the default. Opt out with debug=true or production_mode=false."""
+    if _truthy(request.args.get("debug")):
+        return False
+    if request.args.get("production_mode") is not None and _falsy(request.args.get("production_mode")):
+        return False
+    if request.is_json:
+        data = request.get_json(silent=True) or {}
+        if data.get("debug") is True or _truthy(data.get("debug")):
+            return False
+        if data.get("production_mode") is False or (
+            data.get("production_mode") is not None and _falsy(data.get("production_mode"))
+        ):
+            return False
+    return True
+
+
 def _run_from_request(envelope: str = "predict"):
     payload = _extract_request_payload()
-    analysis = run_comprehensive_analysis(**payload)
+    analysis = run_comprehensive_analysis(
+        **payload,
+        production_mode=_production_mode_from_request(),
+    )
     if envelope == "raw":
         return analysis
     return build_predict_response(analysis)
@@ -162,7 +199,9 @@ def _run_from_request(envelope: str = "predict"):
 
 @api_bp.get("/health")
 def health():
-    return jsonify({"status": "ok", "service": "agrisense"})
+    status = production_status()
+    code = 503 if status.get("missing_artifacts") else 200
+    return jsonify(status), code
 
 
 @api_bp.get("/feature-schema")
@@ -179,7 +218,8 @@ def sample_request():
             "content_type": "application/json",
             "note": (
                 "Pass soil sensors + coordinates. Weather auto-fills from OpenWeatherMap "
-                "when OPENWEATHERMAP_API_KEY is set. crop_type optional."
+                "or free Open-Meteo. Optional history.previous_crop and economic.market_prices "
+                "rank by rotation and farmgate income. Production mode is on by default."
             ),
             "body": SAMPLE_BODY,
         }

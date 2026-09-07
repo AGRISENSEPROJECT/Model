@@ -1,3 +1,4 @@
+from .catalog import load_catalog
 from .crops import CROP_SUITABILITY
 from .diseases import CROP_DISEASES, DISEASE_PATTERNS
 from .environmental_maps import (
@@ -9,6 +10,7 @@ from .fertilizers import FERTILIZER_RECOMMENDATIONS
 from .irrigation import CROP_WATER_NEEDS, SOIL_MOISTURE_THRESHOLDS
 
 __all__ = [
+    "load_catalog",
     "CROP_SUITABILITY",
     "CROP_DISEASES",
     "DISEASE_PATTERNS",

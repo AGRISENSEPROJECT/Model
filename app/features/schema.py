@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
 Status = Literal["live", "derived", "weather_api", "missing", "lab_only"]
-Domain = Literal["soil", "weather"]
+Domain = Literal["soil", "weather", "history", "economic"]
 
 
 @dataclass(frozen=True)
@@ -149,7 +149,59 @@ WEATHER_PARAMS: tuple[ParamSpec, ...] = (
     ParamSpec("et0_mm", "weather", "float", "mm/day", "ET0 proxy from weather", None, "derived"),
 )
 
+HISTORY_PARAMS: tuple[ParamSpec, ...] = (
+    ParamSpec(
+        "previous_crop",
+        "history",
+        "str",
+        "crop_id",
+        "Last harvested crop — used for rotation scoring",
+        None,
+        "live",
+    ),
+    ParamSpec(
+        "season",
+        "history",
+        "str",
+        "A|B|C",
+        "Rwanda MINAGRI season (inferred from date if omitted)",
+        None,
+        "derived",
+    ),
+    ParamSpec(
+        "province",
+        "history",
+        "str",
+        "name",
+        "Province (inferred from GPS if omitted)",
+        None,
+        "derived",
+    ),
+)
+
+ECONOMIC_PARAMS: tuple[ParamSpec, ...] = (
+    ParamSpec(
+        "maximize_income",
+        "economic",
+        "bool",
+        "flag",
+        "Weight farmgate income higher than raw yield",
+        1,
+        "live",
+    ),
+    ParamSpec(
+        "market_prices",
+        "economic",
+        "object",
+        "RWF/kg",
+        "Optional farmgate price overrides per crop_id",
+        None,
+        "live",
+    ),
+)
+
 ALL_PARAMS: tuple[ParamSpec, ...] = SOIL_PARAMS + WEATHER_PARAMS
+ADVISORY_PARAMS: tuple[ParamSpec, ...] = HISTORY_PARAMS + ECONOMIC_PARAMS
 
 # Legacy model artifact uses soil_ph + no EC/soil_temperature — kept for backward compat.
 LEGACY_NUMERIC_FEATURE_KEYS: tuple[str, ...] = (
@@ -183,8 +235,13 @@ SENSOR_LIVE_KEYS: tuple[str, ...] = (
 
 
 def schema_catalog() -> dict[str, Any]:
-    by_domain: dict[str, list[dict[str, Any]]] = {"soil": [], "weather": []}
-    for p in ALL_PARAMS:
+    by_domain: dict[str, list[dict[str, Any]]] = {
+        "soil": [],
+        "weather": [],
+        "history": [],
+        "economic": [],
+    }
+    for p in ALL_PARAMS + ADVISORY_PARAMS:
         by_domain[p.domain].append(asdict(p))
     return {
         "domains": by_domain,
@@ -199,5 +256,9 @@ def schema_catalog() -> dict[str, Any]:
             "potassium",
         ],
         "sensor_note": "Probe measures 6 params; pH requires lab or separate sensor",
+        "ranking_note": (
+            "ML yield uses soil+weather only. Season, rotation, and farmgate prices "
+            "are applied by the multi-factor ranker and do not enter the GBR matrix."
+        ),
         "counts": {d: len(v) for d, v in by_domain.items()},
     }

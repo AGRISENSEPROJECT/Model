@@ -62,6 +62,8 @@ def ingest_sensor_reading(payload: dict[str, Any]) -> dict[str, Any]:
         coordinates=reading.coordinates,
         soil=soil_block,
         flat=flat,
+        history=payload.get("history") if isinstance(payload.get("history"), dict) else None,
+        economic=payload.get("economic") if isinstance(payload.get("economic"), dict) else None,
         production_mode=True,
     )
 

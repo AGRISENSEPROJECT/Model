@@ -1,0 +1,6 @@
+crop,canonical_id,production_tonnes,season_a_area_ha,season_b_area_ha,yield_t_ha_season_a,source,notes
+maize,corn,508000,226982,93927,,NISR SAS 2023 (allAfrica / Milling MEA summaries),"Annual maize >508,000 t; up from ~458,500 t in 2022"
+beans,,441000,312279,309489,0.632,NISR SAS 2023,"Season C beans 3,476 ha; yield 632/789/1003 kg/ha A/B/C"
+irish_potato,irish_potatoes,865000,55613,48210,8.2,NISR SAS 2023 / FreshPlaza,Yield 8.2 / 6.7 / 7.9 t/ha seasons A/B/C
+cassava,,1340000,239221,159089,13.5,NISR SAS 2023,Season B yield 14.8 t/ha; harvested area ~45k / 50k ha A/B
+banana,,1142552,,258564,,NISR SAS 2024B,Season B production; banana is perennial

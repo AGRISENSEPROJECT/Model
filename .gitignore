@@ -9,8 +9,16 @@ uploads/
 .env
 # GitHub rejects files >100MB — train locally: scripts/train_environmental_models.py
 artifacts/yield_predictor.pkl
+artifacts/*.prev.keras
+# Oversampled soil photos are rebuilt by scripts/expand_production_dataset.py
+data/train/**/aug_*.jpg
+data/validation/**/aug_*.jpg
 data/retrain/inbox/*
 !data/retrain/inbox/.gitkeep
 data/retrain/human_labeled/**/*
 !data/retrain/human_labeled/**/.gitkeep
 data/retrain/rejected/*
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore

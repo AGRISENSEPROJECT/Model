@@ -1,0 +1,23 @@
+{
+  "train_before": {
+    "alluvial": 427,
+    "clayey": 338,
+    "loamy": 294,
+    "sandy": 48
+  },
+  "train_after": {
+    "alluvial": 427,
+    "clayey": 338,
+    "loamy": 294,
+    "sandy": 220
+  },
+  "val_after": {
+    "alluvial": 107,
+    "clayey": 85,
+    "loamy": 88,
+    "sandy": 36
+  },
+  "train_sandy_added": 172,
+  "val_sandy_added": 22,
+  "note": "Sandy oversampled from existing real photos + seed close-ups. Retrain CNN with class weights."
+}
