@@ -7,6 +7,8 @@ def test_normalize_crop_aliases():
     assert normalize_crop_id("tomatoes") == "tomatoes"
     assert normalize_crop_id("rice") == "rice"
     assert normalize_crop_id("potato") == "irish_potatoes"
+    assert normalize_crop_id("maize") == "corn"
+    assert normalize_crop_id("beans") == "beans"
 
 
 def test_display_names():
