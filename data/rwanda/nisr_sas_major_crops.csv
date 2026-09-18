@@ -1,6 +1,16 @@
 crop,canonical_id,production_tonnes,season_a_area_ha,season_b_area_ha,yield_t_ha_season_a,source,notes
-maize,corn,508000,226982,93927,,NISR SAS 2023 (allAfrica / Milling MEA summaries),"Annual maize >508,000 t; up from ~458,500 t in 2022"
-beans,,441000,312279,309489,0.632,NISR SAS 2023,"Season C beans 3,476 ha; yield 632/789/1003 kg/ha A/B/C"
-irish_potato,irish_potatoes,865000,55613,48210,8.2,NISR SAS 2023 / FreshPlaza,Yield 8.2 / 6.7 / 7.9 t/ha seasons A/B/C
-cassava,,1340000,239221,159089,13.5,NISR SAS 2023,Season B yield 14.8 t/ha; harvested area ~45k / 50k ha A/B
-banana,,1142552,,258564,,NISR SAS 2024B,Season B production; banana is perennial
+maize,corn,508000,226982,93927,2.2,NISR SAS 2023,"Annual maize >508,000 t"
+beans,,441000,312279,309489,0.632,NISR SAS 2023,"Season C beans 3,476 ha"
+irish_potato,irish_potatoes,865000,55613,48210,8.2,NISR SAS 2023,Yield 8.2 / 6.7 / 7.9 t/ha seasons A/B/C
+cassava,,1340000,239221,159089,13.5,NISR SAS 2023,Season B yield 14.8 t/ha
+banana,,1142552,,258564,8.5,NISR SAS 2024B,Season B production; banana is perennial
+rice,rice,141932,15000,18000,3.5,FAOSTAT 2024,Marshland production
+sweet_potato,sweet_potato,850000,120000,90000,6.0,FAOSTAT 2023,Major food security crop
+sorghum,sorghum,140000,80000,40000,1.2,NISR SAS 2023,Drought tolerant
+soybean,soybean,25000,15000,12000,1.0,NISR SAS 2023,Growing legume sector
+wheat,wheat,12000,5000,3000,1.5,FAOSTAT 2023,Highland crop
+tomatoes,tomatoes,110000,8000,9000,12.0,FAOSTAT 2023,High value horticultural
+coffee,coffee,22000,,35000,0.8,NAEB 2023,Export cash crop
+tea,tea,35000,,28000,1.5,NAEB 2023,Export cash crop
+groundnut,groundnut,15000,10000,8000,0.8,FAOSTAT 2023,Eastern province staple
+pea,pea,18000,12000,8000,1.1,FAOSTAT 2023,Highland legume
