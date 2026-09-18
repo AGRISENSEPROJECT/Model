@@ -361,6 +361,25 @@ def rank_crops(
     }
 
 
+def impute_rwanda_ph(province: str | None) -> float:
+    """
+    Impute missing soil pH using RwaSIS/RAB regional averages.
+    Rwandan soils are generally acidic, especially in the highlands.
+    """
+    if not province:
+        return 5.2  # National average
+    p = province.strip().lower()
+    if p in ("northern", "western"):
+        return 4.8  # Highly acidic highlands
+    if p == "southern":
+        return 5.2  # Acidic central plateau
+    if p == "kigali":
+        return 5.5
+    if p == "eastern":
+        return 5.8  # Moderately acidic lowlands
+    return 5.2
+
+
 def conditions_from_blocks(
     *,
     soil: dict[str, Any] | None = None,
@@ -376,16 +395,22 @@ def conditions_from_blocks(
     coords = coordinates or {}
     lat = coords.get("lat")
     lon = coords.get("lon")
+    province = history.get("province") or infer_province(_to_float(lat), _to_float(lon))
+    ph_val = _to_float(soil.get("soil_ph") or merged.get("soil_ph"))
+    if ph_val is None:
+        ph_val = impute_rwanda_ph(province)
+
     return {
         "soil_texture": soil.get("soil_texture") or merged.get("soil_texture"),
-        "soil_ph": _to_float(soil.get("soil_ph") or merged.get("soil_ph")),
+        "soil_ph": ph_val,
         "nitrogen": _to_float(soil.get("nitrogen") or merged.get("nitrogen")),
         "phosphorus": _to_float(soil.get("phosphorus") or merged.get("phosphorus")),
         "potassium": _to_float(soil.get("potassium") or merged.get("potassium")),
         "temperature_c": _to_float(weather.get("temperature_c") or merged.get("temperature_c")),
         "precip_accum_mm": _to_float(weather.get("precip_accum_mm") or merged.get("precip_accum_mm")),
         "relative_humidity": _to_float(weather.get("relative_humidity") or merged.get("relative_humidity")),
-        "province": history.get("province") or infer_province(_to_float(lat), _to_float(lon)),
+        "province": province,
+        "season": history.get("season"),
         "irrigated": history.get("irrigated"),
     }
 

@@ -317,6 +317,20 @@ def run_comprehensive_analysis(
         "production_mode": production_mode,
     }
 
+    ph_measured = flat_input.get("soil_ph") is not None
+    if not ph_measured:
+        from app.services.crop_ranker import impute_rwanda_ph
+        province = (history or {}).get("province") or (
+            infer_province(coordinates.get("lat"), coordinates.get("lon")) if coordinates else None
+        )
+        imputed_ph = impute_rwanda_ph(province)
+        ph_note = (
+            f"WARNING: pH not measured by RS485 probe. Imputed to {imputed_ph} based on "
+            f"regional averages (RwaSIS/RAB). Fertilizer advice may be inaccurate."
+        )
+    else:
+        ph_note = "pH measured."
+
     return {
         "soil_analysis": {
             "texture": texture or "unknown",
@@ -327,8 +341,8 @@ def run_comprehensive_analysis(
             "soil_temperature_c": soil_block.get("soil_temperature_c"),
             "class_index": soil_cnn.get("class_index"),
             "class_index_source": soil_cnn.get("class_index_source"),
-            "ph_measured": flat_input.get("soil_ph") is not None,
-            "ph_note": "WARNING: pH not measured by RS485 probe. Imputed to 6.5. Fertilizer advice may be inaccurate.",
+            "ph_measured": ph_measured,
+            "ph_note": ph_note,
             "low_confidence": low_cnn,
             "production_warning": (
                 f"Soil CNN confidence {cnn_confidence:.0%} is below the 55% production floor"
