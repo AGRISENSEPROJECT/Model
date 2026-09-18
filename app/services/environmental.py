@@ -9,7 +9,6 @@ import pandas as pd
 
 from app.config import (
     CANONICAL_CROPS,
-    QUALITY_MODEL_PATH,
     YIELD_MODEL_PATH,
 )
 from app.knowledge.environmental_maps import (
@@ -30,13 +29,12 @@ def _load() -> dict[str, Any]:
         return _bundle
     with _lock:
         if _bundle is None:
-            if not YIELD_MODEL_PATH.exists() or not QUALITY_MODEL_PATH.exists():
+            if not YIELD_MODEL_PATH.exists():
                 raise FileNotFoundError(
                     "Environmental models missing. Run scripts/train_environmental_models.py"
                 )
             _bundle = {
                 "yield": joblib.load(YIELD_MODEL_PATH),
-                "quality": joblib.load(QUALITY_MODEL_PATH),
             }
     return _bundle
 
@@ -165,4 +163,4 @@ def recommend_crops_by_yield(
 
 
 def environmental_artifacts_ready() -> bool:
-    return YIELD_MODEL_PATH.exists() and QUALITY_MODEL_PATH.exists()
+    return YIELD_MODEL_PATH.exists()

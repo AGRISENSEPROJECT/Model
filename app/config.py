@@ -15,7 +15,6 @@ SCALER_PATH = ARTIFACTS_DIR / "scaler.pkl"
 LABEL_ENCODER_PATH = ARTIFACTS_DIR / "label_encoder.pkl"
 SOIL_CLASS_INDICES_PATH = ARTIFACTS_DIR / "soil_class_indices.json"
 YIELD_MODEL_PATH = ARTIFACTS_DIR / "yield_predictor.pkl"
-QUALITY_MODEL_PATH = ARTIFACTS_DIR / "soil_quality_predictor.pkl"
 ENV_META_PATH = ARTIFACTS_DIR / "environmental_model_meta.json"
 ENV_DATASET_PATH = DATA_DIR / "environmental" / "crop_yield_dataset.csv"
 
@@ -52,6 +51,7 @@ CROP_DISPLAY_NAMES = {
     "tomatoes": "Tomatoes",
     "wheat": "Wheat",
     "corn": "Maize",
+    "maize": "Maize",
     "barley": "Barley",
     "soybean": "Soybean",
     "cotton": "Cotton",

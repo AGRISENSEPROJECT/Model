@@ -15,8 +15,11 @@ crop-factor dataset so they can still win on income and season fit.
 """
 from __future__ import annotations
 
+import csv
+from pathlib import Path
 from typing import Any
 
+from app.config import DATA_DIR
 from app.knowledge.catalog import load_catalog
 from app.knowledge.rotation import rotation_fit
 from app.knowledge.seasons import (
@@ -25,19 +28,26 @@ from app.knowledge.seasons import (
     infer_province,
     next_seasons,
 )
-from app.utils.crops import normalize_crop_id
+from app.utils.crops import display_crop_name, normalize_crop_id
 
+WEIGHTS_BALANCED = {
+    "agronomic": 0.38,
+    "yield": 0.24,
+    "income": 0.16,
+    "season": 0.12,
+    "rotation": 0.10,
+}
 WEIGHTS_INCOME = {
-    "agronomic": 0.28,
-    "yield": 0.18,
-    "income": 0.32,
+    "agronomic": 0.30,
+    "yield": 0.20,
+    "income": 0.28,
     "season": 0.12,
     "rotation": 0.10,
 }
 WEIGHTS_YIELD = {
-    "agronomic": 0.36,
-    "yield": 0.28,
-    "income": 0.16,
+    "agronomic": 0.38,
+    "yield": 0.30,
+    "income": 0.12,
     "season": 0.12,
     "rotation": 0.08,
 }
@@ -69,13 +79,20 @@ def _npk_score(measured: float | None, optimum: float) -> float:
     return _clamp(1.4 / ratio)
 
 
-def agronomic_fit(record: dict[str, Any], conditions: dict[str, Any]) -> tuple[float, dict[str, float]]:
+def agronomic_fit(record: dict[str, Any], conditions: dict[str, Any], is_irrigated: bool = False) -> tuple[float, dict[str, float]]:
     texture = (conditions.get("soil_texture") or "").lower() or None
     soil_score = 1.0 if texture and texture in record["soils"] else (0.72 if not texture else 0.38)
+    
+    rain_score = _range_score(conditions.get("precip_accum_mm"), record["rain_min"], record["rain_max"])
+    if not is_irrigated and conditions.get("precip_accum_mm") is not None:
+        if conditions["precip_accum_mm"] < record["rain_min"]:
+            # Severe penalty for water-intensive crops if rain is below minimum and no irrigation
+            rain_score *= 0.3
+            
     parts = {
         "soil_texture": soil_score,
         "temperature": _range_score(conditions.get("temperature_c"), record["temp_min"], record["temp_max"]),
-        "rainfall": _range_score(conditions.get("precip_accum_mm"), record["rain_min"], record["rain_max"]),
+        "rainfall": rain_score,
         "humidity": _range_score(conditions.get("relative_humidity"), record["humidity_min"], record["humidity_max"]),
         "ph": _range_score(conditions.get("soil_ph"), record["ph_min"], record["ph_max"]),
         "nitrogen": _npk_score(conditions.get("nitrogen"), record["n_opt"]),
@@ -114,7 +131,15 @@ def _ml_yield_map(ml_rows: list[dict[str, Any]] | None) -> dict[str, float]:
     for row in ml_rows or []:
         cid = row.get("crop_id")
         if cid:
-            out[str(cid)] = float(row.get("predicted_yield") or 0)
+            val = float(row.get("predicted_yield") or 0)
+            out[str(cid)] = val
+            norm = normalize_crop_id(str(cid))
+            if norm:
+                out[norm] = val
+            if str(cid) == "corn":
+                out["maize"] = val
+            elif str(cid) == "maize":
+                out["corn"] = val
     return out
 
 
@@ -125,6 +150,23 @@ def _expected_yield_t_ha(record: dict[str, Any], agro: float, ml_y: float | None
         relative = _clamp(0.45 + 0.7 * (ml_y / ml_max), 0.4, 1.25)
     return round(max(0.05, typical * agro * relative), 3)
 
+
+def _get_local_price(crop_id: str, province: str | None, default_price: float) -> float:
+    price_file = DATA_DIR / "rwanda" / "district_market_prices.csv"
+    if not price_file.exists():
+        return default_price
+    
+    try:
+        with price_file.open(encoding="utf-8", newline="") as fh:
+            for row in csv.DictReader(fh):
+                # For now, just match crop_id if province/district matches loosely, or just return first match
+                if row["crop_id"] == crop_id:
+                    # If province is given, try to match it to district (very coarse)
+                    if not province or province.lower() in row["district"].lower() or row["district"].lower() in province.lower() or province == "Kigali":
+                        return float(row["price_rwf_kg"])
+    except Exception:
+        pass
+    return default_price
 
 def rank_crops(
     *,
@@ -142,23 +184,38 @@ def rank_crops(
         season = current_season()
     previous = normalize_crop_id(history.get("previous_crop") or history.get("last_crop"))
     province = history.get("province") or conditions.get("province")
-    maximize_income = economic.get("maximize_income", True)
-    if isinstance(maximize_income, str):
+    maximize_income = economic.get("maximize_income")
+    objective = str(economic.get("objective") or "").lower()
+    if maximize_income is None:
+        maximize_income = objective in ("income", "commercial", "maximize_income")
+    elif isinstance(maximize_income, str):
         maximize_income = maximize_income.strip().lower() not in {"0", "false", "no"}
-    weights = WEIGHTS_INCOME if maximize_income else WEIGHTS_YIELD
+
+    if objective in ("staple", "food_security", "yield"):
+        weights = WEIGHTS_YIELD
+    elif maximize_income:
+        weights = WEIGHTS_INCOME
+    else:
+        weights = WEIGHTS_BALANCED
+
     price_overrides = economic.get("market_prices") or economic.get("prices") or {}
 
     ml_map = _ml_yield_map(ml_rows)
     ml_max = max(ml_map.values()) if ml_map else 0.0
 
     scored: list[dict[str, Any]] = []
+    is_irrigated = history.get("irrigated", False)
+    if isinstance(is_irrigated, str):
+        is_irrigated = is_irrigated.strip().lower() in {"1", "true", "yes"}
+
     for crop_id, record in catalog.items():
-        agro, agro_parts = agronomic_fit(record, conditions)
+        agro, agro_parts = agronomic_fit(record, conditions, is_irrigated=is_irrigated)
         season_score, season_reason = _season_fit(record, season)
         rot_score, rot_reason = rotation_fit(previous, crop_id, catalog)
         ml_y = ml_map.get(crop_id)
         yield_t = _expected_yield_t_ha(record, agro, ml_y, ml_max)
-        price = float(price_overrides.get(crop_id) or price_overrides.get(record["display_name"]) or record["farmgate_rwf_kg"])
+        base_price = _get_local_price(crop_id, province, float(record["farmgate_rwf_kg"]))
+        price = float(price_overrides.get(crop_id) or price_overrides.get(record["display_name"]) or base_price)
         income = round(yield_t * 1000.0 * price, 0)
         scored.append(
             {
@@ -190,11 +247,14 @@ def rank_crops(
             }
         )
 
-    max_yield = max((r["_yield_t"] for r in scored), default=1.0) or 1.0
     max_income = max((r["_income"] for r in scored), default=1.0) or 1.0
     for row in scored:
-        y_n = row["_yield_t"] / max_yield
-        i_n = row["_income"] / max_income
+        rec = catalog[row["crop_id"]]
+        typical = float(rec["typical_yield_t_ha"])
+        # Benchmark-relative yield potential (avoids comparing 2.2 t/ha grain to 40 t/ha sugarcane)
+        y_n = _clamp(row["_yield_t"] / (typical * 1.25), 0.05, 1.0)
+        # Sub-linear income scaling to reward high cash value while respecting food security
+        i_n = _clamp((row["_income"] / max_income) ** 0.55) if max_income > 0 else 0.5
         composite = (
             weights["agronomic"] * row["_agro"]
             + weights["yield"] * y_n
@@ -218,6 +278,8 @@ def rank_crops(
     ranked = scored[:top_k]
     best = ranked[0] if ranked else None
     income_best = max(scored, key=lambda x: x["expected_income_rwf_ha"]) if scored else None
+    staple_candidates = [r for r in scored if r.get("family") in ("cereal", "legume", "tuber")]
+    top_staple = staple_candidates[0] if staple_candidates else None
 
     plan = []
     follow_from = best["crop_id"] if best else None
@@ -257,6 +319,19 @@ def rank_crops(
         "previous_crop": previous,
         "maximize_income": bool(maximize_income),
         "weights": weights,
+        "best_crop": best["crop"] if best else None,
+        "best_crop_id": best["crop_id"] if best else None,
+        "top_staple_crop": (
+            {
+                "crop_id": top_staple["crop_id"],
+                "crop": top_staple["crop"],
+                "suitability_score": top_staple["suitability_score"],
+                "expected_yield_t_ha": top_staple["expected_yield_t_ha"],
+                "expected_income_rwf_ha": top_staple["expected_income_rwf_ha"],
+            }
+            if top_staple
+            else None
+        ),
         "income_maximizing_crop": (
             {
                 "crop_id": income_best["crop_id"],
@@ -311,7 +386,7 @@ def conditions_from_blocks(
         "precip_accum_mm": _to_float(weather.get("precip_accum_mm") or merged.get("precip_accum_mm")),
         "relative_humidity": _to_float(weather.get("relative_humidity") or merged.get("relative_humidity")),
         "province": history.get("province") or infer_province(_to_float(lat), _to_float(lon)),
-        "season": history.get("season"),
+        "irrigated": history.get("irrigated"),
     }
 
 

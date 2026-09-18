@@ -25,7 +25,6 @@ from app.knowledge.environmental_maps import DATASET_CROP_TO_ID
 
 ENV_CSV = DATA_DIR / "environmental" / "crop_yield_dataset.csv"
 YIELD_MODEL_PATH = ARTIFACTS_DIR / "yield_predictor.pkl"
-QUALITY_MODEL_PATH = ARTIFACTS_DIR / "soil_quality_predictor.pkl"
 ENV_META_PATH = ARTIFACTS_DIR / "environmental_model_meta.json"
 
 FEATURE_COLS = [
@@ -87,20 +86,16 @@ def train(n_estimators: int = 200, seed: int = 42, test_size: float = 0.2) -> di
     df = load_frame()
     X = df[FEATURE_COLS]
     y_yield = df["Crop_Yield"].to_numpy()
-    y_quality = df["Soil_Quality"].to_numpy()
 
-    X_train, X_test, y_tr, y_te, q_tr, q_te = train_test_split(
-        X, y_yield, y_quality, test_size=test_size, random_state=seed
+    X_train, X_test, y_tr, y_te = train_test_split(
+        X, y_yield, test_size=test_size, random_state=seed
     )
 
     yield_pipe = _make_regressor(n_estimators, seed)
-    quality_pipe = _make_regressor(max(100, n_estimators // 2), seed)
 
     yield_pipe.fit(X_train, y_tr)
-    quality_pipe.fit(X_train, q_tr)
 
     y_pred = yield_pipe.predict(X_test)
-    q_pred = quality_pipe.predict(X_test)
 
     metrics = {
         "n_rows": int(len(df)),
@@ -111,20 +106,14 @@ def train(n_estimators: int = 200, seed: int = 42, test_size: float = 0.2) -> di
             "mae": float(mean_absolute_error(y_te, y_pred)),
             "baseline_mae": float(mean_absolute_error(y_te, np.full_like(y_te, y_tr.mean()))),
         },
-        "soil_quality": {
-            "r2": float(r2_score(q_te, q_pred)),
-            "mae": float(mean_absolute_error(q_te, q_pred)),
-        },
         "feature_cols": FEATURE_COLS,
     }
 
     joblib.dump(yield_pipe, YIELD_MODEL_PATH)
-    joblib.dump(quality_pipe, QUALITY_MODEL_PATH)
     ENV_META_PATH.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
 
     print(json.dumps(metrics, indent=2))
     print(f"Saved {YIELD_MODEL_PATH}")
-    print(f"Saved {QUALITY_MODEL_PATH}")
     print(f"Saved {ENV_META_PATH}")
     return metrics
 

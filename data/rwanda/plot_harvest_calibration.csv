@@ -1,0 +1,3 @@
+plot_id,date,season,district,crop_id,variety,soil_texture,lab_ph,nitrogen,phosphorus,potassium,ec_us_cm,moisture_vwc,yield_t_ha,fertilizer_applied
+PLT-001,2026-02-15,A,Musanze,irish_potatoes,Kinigi,loamy,5.8,85,70,110,400,45.0,22.5,NPK 17-17-17
+PLT-002,2026-06-20,B,Nyagatare,corn,Hybrid,sandy,6.2,60,45,40,300,30.0,3.8,DAP+Urea

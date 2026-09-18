@@ -211,6 +211,9 @@ def run_comprehensive_analysis(
         "previous_crop": ranked.get("previous_crop"),
         "maximize_income": ranked.get("maximize_income"),
         "weights": ranked.get("weights"),
+        "best_crop": ranked.get("best_crop"),
+        "best_crop_id": ranked.get("best_crop_id"),
+        "top_staple_crop": ranked.get("top_staple_crop"),
         "income_maximizing_crop": ranked.get("income_maximizing_crop"),
         "crop_rotation_plan": ranked.get("crop_rotation_plan"),
         "factors_used": ranked.get("factors_used"),
@@ -220,7 +223,7 @@ def run_comprehensive_analysis(
     best_crop_id = best["crop_id"] if best else None
     requested = normalize_crop_id(crop_type) if crop_type else None
     fertilizer_crop = requested or best_crop_id
-    irrigation_crop = best_crop_id or requested
+    irrigation_crop = requested or best_crop_id
     texture = soil_cnn.get("texture") or merged_preview.get("soil_texture")
 
     nutrient_analysis = None
@@ -273,23 +276,6 @@ def run_comprehensive_analysis(
 
     disease = detect_disease(image_path or "", irrigation_crop or "unknown")
 
-    env_quality = None
-    if environmental_artifacts_ready() and not production_mode:
-        try:
-            env_quality = predict_soil_quality(
-                soil_texture=texture or "loamy",
-                temperature=float(weather_block.get("temperature_c") or 24),
-                humidity=float(weather_block.get("relative_humidity") or 70),
-                nitrogen=float(nitrogen or 0),
-                phosphorus=float(phosphorus or 0),
-                potassium=float(potassium or 0),
-                soil_ph=flat_input.get("soil_ph"),
-                wind_speed=weather_block.get("wind_speed"),
-                crop_id=irrigation_crop,
-            )
-        except Exception as exc:  # noqa: BLE001
-            env_quality = {"error": str(exc)}
-
     score_spread = None
     if len(crop_recommendations) >= 2:
         score_spread = (
@@ -341,9 +327,8 @@ def run_comprehensive_analysis(
             "soil_temperature_c": soil_block.get("soil_temperature_c"),
             "class_index": soil_cnn.get("class_index"),
             "class_index_source": soil_cnn.get("class_index_source"),
-            "environmental_quality": env_quality,
             "ph_measured": flat_input.get("soil_ph") is not None,
-            "ph_note": "pH not measured by RS485 probe unless lab_ph provided",
+            "ph_note": "WARNING: pH not measured by RS485 probe. Imputed to 6.5. Fertilizer advice may be inaccurate.",
             "low_confidence": low_cnn,
             "production_warning": (
                 f"Soil CNN confidence {cnn_confidence:.0%} is below the 55% production floor"
@@ -355,6 +340,9 @@ def run_comprehensive_analysis(
         "crop_recommendations": crop_recommendations,
         "best_crop": display_crop_name(best_crop_id) if best_crop_id else "unknown",
         "best_crop_id": best_crop_id,
+        "requested_crop": display_crop_name(requested) if requested else None,
+        "requested_crop_id": requested,
+        "top_staple_crop": (ranking_meta or {}).get("top_staple_crop"),
         "fertilizer_recommendation": fertilizer,
         "irrigation_recommendation": irrigation,
         "disease_analysis": disease,
@@ -434,6 +422,9 @@ def build_predict_response(analysis: dict[str, Any]) -> dict[str, Any]:
         "crop_recommendations": crops,
         "best_crop": analysis.get("best_crop"),
         "best_crop_id": analysis.get("best_crop_id"),
+        "requested_crop": analysis.get("requested_crop"),
+        "requested_crop_id": analysis.get("requested_crop_id"),
+        "top_staple_crop": analysis.get("top_staple_crop"),
         "season": analysis.get("season"),
         "season_label": analysis.get("season_label"),
         "province": analysis.get("province"),
