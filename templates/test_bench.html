@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AGRISENSE | AI Test Bench</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .json-editor { font-family: monospace; font-size: 13px; }
+    </style>
+</head>
+<body>
+    <div id="app" class="min-h-screen flex flex-col">
+        <!-- Header -->
+        <header class="bg-green-700 text-white shadow-md">
+            <div class="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
+                <div>
+                    <h1 class="text-2xl font-bold">AGRISENSE AI Test Bench</h1>
+                    <p class="text-green-100 text-sm">Interactive scenario evaluation for the multi-factor ranker</p>
+                </div>
+                <a href="/" class="text-green-100 hover:text-white underline text-sm">Back to App</a>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-grow max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8 w-full grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- Left Column: Scenarios -->
+            <div class="lg:col-span-1 space-y-6">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-lg font-semibold text-gray-900 mb-4">Test Scenarios</h2>
+                    <div class="space-y-3">
+                        <button 
+                            v-for="(scenario, index) in scenarios" 
+                            :key="index"
+                            @click="selectScenario(index)"
+                            :class="['w-full text-left px-4 py-3 rounded-md border transition-colors', 
+                                     selectedIndex === index ? 'bg-green-50 border-green-500 text-green-800' : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-700']"
+                        >
+                            <div class="font-medium">{{ scenario.name }}</div>
+                            <div class="text-xs mt-1 opacity-80">{{ scenario.description }}</div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Middle Column: Payload Editor -->
+            <div class="lg:col-span-1 space-y-6">
+                <div class="bg-white rounded-lg shadow p-6 flex flex-col h-full">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-lg font-semibold text-gray-900">Request Payload</h2>
+                        <button 
+                            @click="runAnalysis" 
+                            :disabled="loading"
+                            class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50"
+                        >
+                            {{ loading ? 'Analyzing...' : 'Run Analysis' }}
+                        </button>
+                    </div>
+                    <p class="text-xs text-gray-500 mb-2">Edit the JSON below to test how the AI responds to different soil, weather, and economic conditions.</p>
+                    <textarea 
+                        v-model="payloadStr" 
+                        class="json-editor w-full flex-grow border border-gray-300 rounded-md p-3 bg-gray-50 focus:ring-green-500 focus:border-green-500"
+                        rows="20"
+                    ></textarea>
+                    <div v-if="jsonError" class="mt-2 text-red-600 text-sm">{{ jsonError }}</div>
+                </div>
+            </div>
+
+            <!-- Right Column: Results -->
+            <div class="lg:col-span-1 space-y-6">
+                <div class="bg-white rounded-lg shadow p-6 min-h-[500px]">
+                    <h2 class="text-lg font-semibold text-gray-900 mb-4">AI Recommendations</h2>
+                    
+                    <div v-if="!result && !loading" class="text-gray-500 text-center py-12">
+                        Select a scenario and click "Run Analysis" to see results.
+                    </div>
+                    
+                    <div v-if="loading" class="flex justify-center items-center py-12">
+                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-700"></div>
+                    </div>
+
+                    <div v-if="result && !loading" class="space-y-6">
+                        <!-- Warnings -->
+                        <div v-if="result.soil_analysis?.ph_note?.includes('WARNING')" class="bg-yellow-50 border-l-4 border-yellow-400 p-3 text-sm text-yellow-800">
+                            {{ result.soil_analysis.ph_note }}
+                        </div>
+
+                        <!-- Top Crops -->
+                        <div>
+                            <h3 class="font-medium text-gray-900 mb-3 border-b pb-2">Top Ranked Crops</h3>
+                            <div class="space-y-4">
+                                <div v-for="(crop, idx) in result.crop_recommendations.slice(0, 5)" :key="crop.crop_id" class="relative">
+                                    <div class="flex justify-between items-baseline mb-1">
+                                        <div class="font-semibold text-gray-900">
+                                            <span class="text-gray-400 mr-1">#{{idx + 1}}</span> {{ crop.crop }}
+                                        </div>
+                                        <div class="text-green-700 font-bold text-sm">{{ crop.suitability_score }} / 100</div>
+                                    </div>
+                                    
+                                    <div class="grid grid-cols-2 gap-2 text-xs text-gray-600 bg-gray-50 p-2 rounded mb-2">
+                                        <div><span class="font-medium">Yield:</span> {{ crop.expected_yield_t_ha }} t/ha</div>
+                                        <div><span class="font-medium">Income:</span> {{ formatCurrency(crop.expected_income_rwf_ha) }} RWF/ha</div>
+                                        <div><span class="font-medium">Agro Fit:</span> {{ crop.agronomic_fit }}%</div>
+                                        <div class="col-span-2"><span class="font-medium">Season:</span> {{ crop.factor_breakdown?.season }}</div>
+                                    </div>
+                                    
+                                    <!-- Progress bar -->
+                                    <div class="w-full bg-gray-200 rounded-full h-1.5">
+                                        <div class="bg-green-600 h-1.5 rounded-full" :style="`width: ${crop.suitability_score}%`"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Rotation Plan -->
+                        <div v-if="result.crop_rotation_plan?.length">
+                            <h3 class="font-medium text-gray-900 mb-3 border-b pb-2">Suggested Rotation Plan</h3>
+                            <div class="space-y-2 text-sm">
+                                <div v-for="plan in result.crop_rotation_plan" :key="plan.season" class="flex items-start">
+                                    <div class="w-8 font-bold text-gray-500">{{ plan.season }}</div>
+                                    <div>
+                                        <div class="font-medium text-gray-900">{{ plan.crop }}</div>
+                                        <div class="text-xs text-gray-500">{{ plan.reason }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Debug Info -->
+                        <div class="mt-8 pt-4 border-t border-gray-200">
+                            <details class="text-xs text-gray-500">
+                                <summary class="cursor-pointer hover:text-gray-700">View Raw JSON Response</summary>
+                                <pre class="mt-2 p-2 bg-gray-100 rounded overflow-x-auto">{{ JSON.stringify(result, null, 2) }}</pre>
+                            </details>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        const SCENARIOS = [
+            {
+                name: "Northern Highlands (Musanze)",
+                description: "Acidic, Cool, Wet. Ideal for Irish Potatoes and Wheat.",
+                payload: {
+                    temperature: 16.0,
+                    humidity: 82.0,
+                    rainfall: 1400.0,
+                    nitrogen: 90.0,
+                    phosphorus: 70.0,
+                    potassium: 80.0,
+                    soil_moisture: 60.0,
+                    soil: { soil_texture: "loamy", soil_ph: 5.0 },
+                    history: { province: "Northern", season: "A" },
+                    economic: { maximize_income: true },
+                    production_mode: true
+                }
+            },
+            {
+                name: "Eastern Lowlands (Bugesera)",
+                description: "Hot, Dry, Sandy. Needs drought-tolerant crops.",
+                payload: {
+                    temperature: 26.0,
+                    humidity: 55.0,
+                    rainfall: 600.0,
+                    nitrogen: 40.0,
+                    phosphorus: 30.0,
+                    potassium: 40.0,
+                    soil_moisture: 25.0,
+                    soil: { soil_texture: "sandy", soil_ph: 6.5 },
+                    history: { province: "Eastern", season: "A" },
+                    economic: { maximize_income: true },
+                    production_mode: true
+                }
+            },
+            {
+                name: "Southern Marshland (Huye)",
+                description: "Wet, Clayey, Irrigated in Season C. Ideal for Rice.",
+                payload: {
+                    temperature: 22.0,
+                    humidity: 75.0,
+                    rainfall: 200.0,
+                    nitrogen: 60.0,
+                    phosphorus: 40.0,
+                    potassium: 50.0,
+                    soil_moisture: 80.0,
+                    soil: { soil_texture: "clayey", soil_ph: 5.5 },
+                    history: { province: "Southern", season: "C", irrigated: true },
+                    economic: { maximize_income: true },
+                    production_mode: true
+                }
+            },
+            {
+                name: "Kigali Peri-Urban",
+                description: "Good soil, high market access. Testing income maximization.",
+                payload: {
+                    temperature: 21.0,
+                    humidity: 70.0,
+                    rainfall: 1000.0,
+                    nitrogen: 80.0,
+                    phosphorus: 60.0,
+                    potassium: 70.0,
+                    soil_moisture: 50.0,
+                    soil: { soil_texture: "loamy", soil_ph: 6.2 },
+                    history: { province: "Kigali", season: "B" },
+                    economic: { maximize_income: true },
+                    production_mode: true
+                }
+            }
+        ];
+
+        createApp({
+            data() {
+                return {
+                    scenarios: SCENARIOS,
+                    selectedIndex: 0,
+                    payloadStr: "",
+                    jsonError: null,
+                    loading: false,
+                    result: null
+                }
+            },
+            mounted() {
+                this.selectScenario(0);
+            },
+            methods: {
+                selectScenario(index) {
+                    this.selectedIndex = index;
+                    this.payloadStr = JSON.stringify(this.scenarios[index].payload, null, 4);
+                    this.jsonError = null;
+                    this.result = null;
+                },
+                formatCurrency(value) {
+                    if (!value) return "0";
+                    return new Intl.NumberFormat('en-RW').format(value);
+                },
+                async runAnalysis() {
+                    this.jsonError = null;
+                    let payload;
+                    try {
+                        payload = JSON.parse(this.payloadStr);
+                    } catch (e) {
+                        this.jsonError = "Invalid JSON format: " + e.message;
+                        return;
+                    }
+
+                    this.loading = true;
+                    this.result = null;
+
+                    try {
+                        const response = await fetch('/api/comprehensive-analyze', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        
+                        if (!response.ok) {
+                            const errData = await response.json();
+                            throw new Error(errData.error || `HTTP error ${response.status}`);
+                        }
+                        
+                        this.result = await response.json();
+                    } catch (e) {
+                        this.jsonError = "API Error: " + e.message;
+                    } finally {
+                        this.loading = false;
+                    }
+                }
+            }
+        }).mount('#app')
+    </script>
+</body>
+</html>

@@ -330,3 +330,7 @@ def register_web_routes(app):
     @app.get("/playground")
     def playground():
         return send_from_directory(app.template_folder, "playground.html")
+
+    @app.get("/test-bench")
+    def test_bench():
+        return send_from_directory(app.template_folder, "test_bench.html")
