@@ -1,0 +1,12 @@
+flask==3.1.1
+flask-cors==5.0.1
+flasgger==0.9.7.1
+gunicorn==23.0.0
+numpy==2.0.2
+pandas==2.2.3
+scikit-learn==1.6.1
+joblib==1.4.2
+pillow==11.1.0
+tensorflow-cpu==2.18.0
+requests==2.32.3
+h5py==3.12.1

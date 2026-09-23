@@ -1,0 +1,89 @@
+name: Deploy Model to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-model-vps
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # TensorFlow image rebuild is slow on a 4GB VPS.
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${VPS_PORT:-222}" -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Sync Model source to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          rsync -az --delete \
+            --exclude .venv \
+            --exclude .tools \
+            --exclude .git \
+            --exclude uploads \
+            --exclude '__pycache__' \
+            --exclude '*.pyc' \
+            --exclude '*.log' \
+            --exclude data/train \
+            --exclude data/validation \
+            --exclude data/retrain/inbox \
+            --exclude data/retrain/human_labeled \
+            --exclude data/device_readings \
+            --exclude artifacts/yield_predictor.pkl \
+            --include .env.example \
+            --exclude .env \
+            --exclude .env.* \
+            -e "ssh -i ~/.ssh/deploy_key -p ${VPS_PORT:-222} -o StrictHostKeyChecking=yes" \
+            ./ "${VPS_USER}@${VPS_HOST}:/opt/agrisense/Model/"
+
+      - name: Rebuild and restart model
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-222}" \
+            "${VPS_USER}@${VPS_HOST}" \
+            'cd /opt/agrisense/deploy && docker compose up -d --build model'
+
+      - name: Health check
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          for i in $(seq 1 60); do
+            if ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-222}" \
+              "${VPS_USER}@${VPS_HOST}" \
+              'docker exec agrisense-model curl -fsS http://127.0.0.1:5000/api/health >/dev/null'; then
+              echo "Model healthy"
+              curl -fsS "http://${VPS_HOST}/api/health" && echo
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Model health check failed"
+          ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-222}" \
+            "${VPS_USER}@${VPS_HOST}" \
+            'cd /opt/agrisense/deploy && docker compose ps model && docker compose logs --tail=80 model' || true
+          exit 1
