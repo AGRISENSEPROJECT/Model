@@ -163,3 +163,16 @@ def test_production_status_shape():
     status = production_status()
     assert status["weather"]["open_meteo_fallback"] is True
     assert "precision_ranker" in status["artifacts"]
+
+
+def test_serving_ready_without_training_images(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.production_ready._count_split",
+        lambda _: {name: 0 for name in ("alluvial", "clayey", "loamy", "sandy")},
+    )
+    status = production_status()
+    assert status["missing_artifacts"] == []
+    assert status["production_ready"] is True
+    assert status["status"] == "ok"
+    assert status["training"]["ready"] is False
+    assert len(status["training"]["warnings"]) == 2
