@@ -7,9 +7,10 @@ uploads/
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
-.env
-# GitHub rejects files >100MB — train locally: scripts/train_environmental_models.py
+# Generated environmental artifacts; build with scripts/train_environmental_models.py.
 artifacts/yield_predictor.pkl
+artifacts/soil_quality_predictor.pkl
+artifacts/environmental_model_meta.json
 artifacts/*.prev.keras
 # Oversampled soil photos are rebuilt by scripts/expand_production_dataset.py
 data/train/**/aug_*.jpg
@@ -23,3 +24,5 @@ branch_structure.json
 temp_auto_push.bat
 temp_interactive_push.bat
 .gitignore
+config.bat
+node_modules

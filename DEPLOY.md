@@ -6,9 +6,7 @@ syncs this repo to `/opt/agrisense/Model/`, rebuilds only the Compose
 reachability, and the public API over HTTPS. The workflow also supports manual
 runs. The model stays internal to Docker and is not publicly exposed.
 
-This workflow currently lives on the local `feat/vps-deploy` branch. It will
-not run on `main` until that branch is merged and pushed by the repository
-owner.
+The workflow runs on pushes to `main` and can also be started manually.
 
 ## One-time GitHub Actions setup
 
@@ -39,18 +37,17 @@ update, run the workflow manually with `approve_artifact_update=true`.
 `yield_predictor.pkl`, `soil_quality_predictor.pkl`, and
 `environmental_model_meta.json` are derived from
 `data/environmental/crop_yield_dataset.csv`. CI regenerates them for tests,
-but the deployment excludes them from artifact sync. The VPS keeps its own
+and Git ignores them. The deployment excludes them from artifact sync. The VPS keeps its own
 copies in the persistent artifact mount. The runtime uses
 `scikit-learn==1.9.0`, matching the committed crop and precision pickles.
 When changing this version or the environmental training code, back up the
 current image and artifacts, rebuild, and regenerate these three derived files
 with the new image before restarting the model.
 
-## Before the first push
+## Repository and VPS setup
 
-- Commit the workflow, dependency, readiness, test, and documentation changes,
-  then merge `feat/vps-deploy` into `main`. Leave the unrelated local
-  environmental artifact modifications out unless you explicitly want them.
+- Keep generated environmental artifacts out of Git when changing model code
+  or training data.
 - The VPS now bind-mounts `/app/artifacts`, `/app/data/retrain`,
   `/app/data/field_visits`, and `/app/data/device_readings` from
   `/opt/agrisense/Model/`. The live files were preserved before the first
