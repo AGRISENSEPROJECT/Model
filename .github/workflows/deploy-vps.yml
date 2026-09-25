@@ -4,86 +4,161 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      approve_artifact_update:
+        description: Deploy tracked artifacts that differ from the running model
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
 
 concurrency:
   group: deploy-model-vps
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  verify:
     runs-on: ubuntu-latest
-    # TensorFlow image rebuild is slow on a 4GB VPS.
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements.prod.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.prod.txt pytest
+
+      - name: Generate environmental artifacts
+        run: python scripts/train_environmental_models.py
+
+      - name: Test
+        run: python -m pytest -q
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    # TensorFlow image rebuild can take several minutes on the VPS.
     timeout-minutes: 60
+    env:
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_PORT: ${{ secrets.VPS_PORT }}
+      VPS_USER: ${{ secrets.VPS_USER }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup SSH
-        env:
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_PORT: ${{ secrets.VPS_PORT }}
         run: |
-          mkdir -p ~/.ssh
+          : "${VPS_SSH_KEY:?Set VPS_SSH_KEY}"
+          : "${VPS_KNOWN_HOSTS:?Set VPS_KNOWN_HOSTS}"
+          : "${VPS_HOST:?Set VPS_HOST}"
+          : "${VPS_USER:?Set VPS_USER}"
+          install -m 700 -d ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p "${VPS_PORT:-222}" -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Verify persistent model data
+        run: |
+          mounts=$(ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-22}" -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "${VPS_USER}@${VPS_HOST}" \
+            'docker inspect --format "{{range .Mounts}}{{println .Destination}}{{end}}" agrisense-model')
+          for path in /app/artifacts /app/data/retrain /app/data/field_visits /app/data/device_readings; do
+            if ! grep -Fxq "$path" <<< "$mounts"; then
+              echo "$path is not persistent; refusing to recreate the model container"
+              exit 1
+            fi
+          done
+
+      - name: Check artifact versions
+        env:
+          APPROVE_ARTIFACT_UPDATE: ${{ inputs.approve_artifact_update }}
+        run: |
+          changes=$(rsync -rcni \
+            --exclude yield_predictor.pkl \
+            --exclude soil_quality_predictor.pkl \
+            --exclude environmental_model_meta.json \
+            -e "ssh -i ~/.ssh/deploy_key -p ${VPS_PORT:-22} -o BatchMode=yes -o StrictHostKeyChecking=yes" \
+            ./artifacts/ "${VPS_USER}@${VPS_HOST}:/opt/agrisense/Model/artifacts/")
+          if [ -n "$changes" ] && [ "$APPROVE_ARTIFACT_UPDATE" != true ]; then
+            printf '%s\n' "$changes"
+            echo "Tracked artifacts differ from the live model. Use a manually approved artifact deployment."
+            exit 1
+          fi
 
       - name: Sync Model source to VPS
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_PORT: ${{ secrets.VPS_PORT }}
-          VPS_USER: ${{ secrets.VPS_USER }}
         run: |
-          rsync -az --delete \
+          rsync -az --delete-delay \
             --exclude .venv \
             --exclude .tools \
             --exclude .git \
+            --exclude .github \
             --exclude uploads \
             --exclude '__pycache__' \
             --exclude '*.pyc' \
             --exclude '*.log' \
-            --exclude data/train \
-            --exclude data/validation \
-            --exclude data/retrain/inbox \
-            --exclude data/retrain/human_labeled \
-            --exclude data/device_readings \
-            --exclude artifacts/yield_predictor.pkl \
+            --exclude data/train/ \
+            --exclude data/validation/ \
+            --exclude data/retrain/ \
+            --exclude data/device_readings/ \
+            --exclude data/field_visits/ \
+            --exclude data/images/ \
+            --exclude artifacts/ \
             --include .env.example \
             --exclude .env \
             --exclude .env.* \
-            -e "ssh -i ~/.ssh/deploy_key -p ${VPS_PORT:-222} -o StrictHostKeyChecking=yes" \
+            -e "ssh -i ~/.ssh/deploy_key -p ${VPS_PORT:-22} -o BatchMode=yes -o StrictHostKeyChecking=yes" \
             ./ "${VPS_USER}@${VPS_HOST}:/opt/agrisense/Model/"
+          rsync -az --no-owner --no-group --chmod=Dg+sw,Fg+w \
+            --exclude yield_predictor.pkl \
+            --exclude soil_quality_predictor.pkl \
+            --exclude environmental_model_meta.json \
+            -e "ssh -i ~/.ssh/deploy_key -p ${VPS_PORT:-22} -o BatchMode=yes -o StrictHostKeyChecking=yes" \
+            ./artifacts/ "${VPS_USER}@${VPS_HOST}:/opt/agrisense/Model/artifacts/"
 
       - name: Rebuild and restart model
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_PORT: ${{ secrets.VPS_PORT }}
-          VPS_USER: ${{ secrets.VPS_USER }}
         run: |
-          ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-222}" \
+          ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-22}" -o BatchMode=yes -o StrictHostKeyChecking=yes \
             "${VPS_USER}@${VPS_HOST}" \
-            'cd /opt/agrisense/deploy && docker compose up -d --build model'
+            'flock -w 1800 /tmp/agrisense-compose.lock -c "cd /opt/agrisense/deploy && docker compose up -d --no-deps --build model"'
 
       - name: Health check
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_PORT: ${{ secrets.VPS_PORT }}
-          VPS_USER: ${{ secrets.VPS_USER }}
         run: |
+          model_healthy=false
           for i in $(seq 1 60); do
-            if ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-222}" \
+            if ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-22}" -o BatchMode=yes -o StrictHostKeyChecking=yes \
               "${VPS_USER}@${VPS_HOST}" \
-              'docker exec agrisense-model curl -fsS http://127.0.0.1:5000/api/health >/dev/null'; then
-              echo "Model healthy"
-              curl -fsS "http://${VPS_HOST}/api/health" && echo
-              exit 0
+              'docker exec agrisense-model curl -fsS http://127.0.0.1:5000/api/health | jq -e ".production_ready == true" >/dev/null'; then
+              model_healthy=true
+              break
             fi
             sleep 5
           done
-          echo "Model health check failed"
-          ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-222}" \
+          if [ "$model_healthy" != true ]; then
+            echo "Model health check failed"
+            exit 1
+          fi
+          ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-22}" -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "${VPS_USER}@${VPS_HOST}" \
+            'docker exec agrisense-api curl -fsS http://model:5000/api/health >/dev/null'
+          curl --fail --silent --show-error --retry 30 --retry-delay 3 --retry-all-errors \
+            https://api.agrisense.rw/api/health
+
+      - name: Model logs on failure
+        if: failure()
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-22}" -o BatchMode=yes -o StrictHostKeyChecking=yes \
             "${VPS_USER}@${VPS_HOST}" \
             'cd /opt/agrisense/deploy && docker compose ps model && docker compose logs --tail=80 model' || true
-          exit 1

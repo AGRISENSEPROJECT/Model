@@ -67,15 +67,16 @@ def production_status() -> dict[str, Any]:
     }
     missing_artifacts = [name for name, ok in artifacts.items() if not ok]
 
-    warnings: list[str] = []
+    training_warnings: list[str] = []
     if train_counts.get("sandy", 0) < MIN_SANDY_TRAIN:
-        warnings.append(
+        training_warnings.append(
             f"Sandy train images {train_counts.get('sandy', 0)} < {MIN_SANDY_TRAIN}"
         )
     if val_counts.get("sandy", 0) < MIN_SANDY_VAL:
-        warnings.append(
+        training_warnings.append(
             f"Sandy val images {val_counts.get('sandy', 0)} < {MIN_SANDY_VAL}"
         )
+    warnings: list[str] = []
     if sandy_recall < MIN_SANDY_RECALL:
         warnings.append(
             f"Sandy recall {sandy_recall:.1%} is below production floor {MIN_SANDY_RECALL:.0%}"
@@ -88,9 +89,8 @@ def production_status() -> dict[str, Any]:
     weather_owm = bool(get_api_key())
     ready = (
         not missing_artifacts
-        and train_counts.get("sandy", 0) >= MIN_SANDY_TRAIN
         and sandy_recall >= MIN_SANDY_RECALL
-        and (not soil_accuracy or soil_accuracy >= MIN_SOIL_ACCURACY)
+        and soil_accuracy >= MIN_SOIL_ACCURACY
     )
 
     return {
@@ -100,6 +100,7 @@ def production_status() -> dict[str, Any]:
         "artifacts": artifacts,
         "missing_artifacts": missing_artifacts,
         "dataset": {"train": train_counts, "validation": val_counts},
+        "training": {"ready": not training_warnings, "warnings": training_warnings},
         "soil_cnn": {
             "accuracy": round(soil_accuracy, 4) if soil_accuracy else None,
             "sandy_recall": round(sandy_recall, 4),

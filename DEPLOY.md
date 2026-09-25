@@ -1,47 +1,74 @@
 # Model deploy (VPS)
 
-Push to `main` (or **Actions → Deploy Model to VPS → Run workflow**) syncs this repo to the server and rebuilds the Flask/TensorFlow `model` container.
+A push to `main` generates environmental artifacts for CI, runs pytest,
+syncs this repo to `/opt/agrisense/Model/`, rebuilds only the Compose
+`model` service, and checks model health, API-to-model
+reachability, and the public API over HTTPS. The workflow also supports manual
+runs. The model stays internal to Docker and is not publicly exposed.
 
-This deploy is for the current package layout (`wsgi:app`, `app/`, `artifacts/`). Do not use the old root `app.py` image.
+This workflow currently lives on the local `feat/vps-deploy` branch. It will
+not run on `main` until that branch is merged and pushed by the repository
+owner.
 
-Target paths on the VPS:
+## One-time GitHub Actions setup
 
-- Code: `/opt/agrisense/Model/`
-- Compose: `/opt/agrisense/deploy/` (service name: `model`)
-- Model is **internal only** — Nest calls `http://model:5000` on the Docker network
-
-Rebuilds can take a while (TensorFlow + pip). First boot also trains `artifacts/yield_predictor.pkl` if it is missing (GitHub blocks files over 100 MB). The workflow waits for `GET /api/health` before finishing.
-
-## One-time GitHub secrets
-
-Same values as the web / backend repos:
+Set these secrets in the **Model** repository:
 
 | Secret | Value |
-|---|---|
-| `VPS_HOST` | VPS public IP |
-| `VPS_PORT` | SSH port (example: `222`) |
-| `VPS_USER` | Deploy user (example: `root`) |
-| `VPS_SSH_KEY` | Deploy private key (full PEM / OpenSSH private key) |
+| --- | --- |
+| `VPS_HOST` | `92.4.152.193` |
+| `VPS_PORT` | `22` (optional; the workflow defaults to 22) |
+| `VPS_USER` | `ubuntu` |
+| `VPS_SSH_KEY` | Private key authorized for `ubuntu`; preferably a dedicated deploy key |
+| `VPS_KNOWN_HOSTS` | Verified SSH host-key line for `92.4.152.193` |
 
-On the VPS, copy `.env.example` to `/opt/agrisense/Model/.env` and set at least:
+Obtain the server's public host key through the existing trusted
+`ssh agrisense-oracle` connection, verify its fingerprint, and store a
+`92.4.152.193 ssh-ed25519 <public-key>` line as `VPS_KNOWN_HOSTS`. Do not
+generate this value with an unauthenticated `ssh-keyscan` in the workflow.
+The ED25519 host-key fingerprint observed through the existing SSH alias is
+`SHA256:Hmha/BVjMlbtOFQyjWnIe5lbiRoM4ZlWIbcd4AGwPGE`.
+Never commit the private key or production configuration.
 
-- `SENSOR_API_KEY` — must match the ESP32 firmware
-- `OPENWEATHERMAP_API_KEY` — optional; Open-Meteo is the fallback
-- `SECRET_KEY` — change from the development default
+## Artifact ownership
 
-## After secrets are set
+GitHub is the source for committed crop, precision, and soil CNN artifacts.
+Normal pushes refuse to replace a differing live artifact. For an intentional
+update, run the workflow manually with `approve_artifact_update=true`.
 
-```bash
-git push origin main
-```
+`yield_predictor.pkl`, `soil_quality_predictor.pkl`, and
+`environmental_model_meta.json` are derived from
+`data/environmental/crop_yield_dataset.csv`. CI regenerates them for tests,
+but the deployment excludes them from artifact sync. The VPS keeps its own
+copies in the persistent artifact mount. The runtime uses
+`scikit-learn==1.9.0`, matching the committed crop and precision pickles.
+When changing this version or the environmental training code, back up the
+current image and artifacts, rebuild, and regenerate these three derived files
+with the new image before restarting the model.
 
-Or run the workflow manually from the Actions tab.
+## Before the first push
 
-## Verify
+- Commit the workflow, dependency, readiness, test, and documentation changes,
+  then merge `feat/vps-deploy` into `main`. Leave the unrelated local
+  environmental artifact modifications out unless you explicitly want them.
+- The VPS now bind-mounts `/app/artifacts`, `/app/data/retrain`,
+  `/app/data/field_visits`, and `/app/data/device_readings` from
+  `/opt/agrisense/Model/`. The live files were preserved before the first
+  model-only restart. The backup is at
+  `/opt/agrisense/deploy/backups/model-persistence-20260925T005432Z/`.
+- The workflow checks those mounts before syncing. It protects runtime data,
+  uploads, and all three generated artifacts. Other tracked artifacts are synced
+  separately with shared write permissions.
+- Keep the working Compose file at
+  `/opt/agrisense/deploy/docker-compose.yml`; this workflow does not sync it.
 
-```bash
-ssh -p 222 USER@VPS_IP 'docker exec agrisense-model curl -fsS http://127.0.0.1:5000/api/health'
-curl -fsS http://VPS_IP/api/health
-```
+The Compose healthcheck uses `/api/health`. Serving readiness is independent
+of training-image availability: `production_ready: true` means the artifacts
+and validation thresholds pass, while `training.ready` remains false when
+training images are omitted from the inference image. The workflow checks
+serving readiness, API-to-model reachability, and public API health. It does not
+perform an authenticated prediction or automatically roll back on failure.
 
-Swagger (if the reverse proxy exposes the model): `http://VPS_IP/apidocs/`
+The model-runtime backup is at
+`/opt/agrisense/deploy/backups/model-runtime-upgrade-20260925T014448Z/`,
+with rollback image `agrisense-model:rollback-20260925T014448Z`.
